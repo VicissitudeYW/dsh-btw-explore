@@ -43,8 +43,8 @@ function ExploreNativeMount({ ownerSessionId, cardId, nativeSessionId, SessionPr
   }, [nativeSessionId, revision]);
 
   if (error) return h('div', { className: 'dsh-btw-banner dsh-btw-error', role: 'alert' },
-    '无法载入原生对话。', exploreButton('重试', { onClick: () => setRevision((value) => value + 1) }));
-  if (!reference) return h('p', { className: 'dsh-btw-native-status', role: 'status' }, '正在打开原生对话…');
+    '无法打开对话，请重试。', exploreButton('重试', { onClick: () => setRevision((value) => value + 1) }));
+  if (!reference) return h('p', { className: 'dsh-btw-native-status', role: 'status' }, '正在打开对话…');
   return h('div', { className: 'dsh-btw-native', 'data-btw-native-card': cardId, 'data-btw-root-session': ownerSessionId },
     h(ExploreCardContext.Provider, { value: { ownerSessionId, cardId } },
       h(SessionProvider, { session: reference }, renderSlot(EXPLORE_NATIVE_CONTENT, {}))),

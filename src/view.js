@@ -461,7 +461,7 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
     const parent = byId.get(parentId);
     const mainAnchor = source?.role || source?.turn != null || source?.messageId;
     if (!quote && !parent && !mainAnchor) return null;
-    const label = parent ? `来自 ${exploreTitle(parent)}${turnNumber ? ` · 第 ${turnNumber} 轮` : turnId ? ' · 指定轮次' : ''}`
+    const label = parent ? `来自 ${exploreTitle(parent)}${turnNumber ? ` · 第 ${turnNumber} 轮` : ''}`
       : source?.role === 'user' ? '来自主聊天的提问' : source?.role === 'assistant' ? '来自主聊天的回答' : '来自主聊天';
     const excerpt = quote || anchorQuestion;
     return h('div', { className: 'dsh-btw-source' },
@@ -585,7 +585,7 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
           ),
           !composer && card && h('p', { className: 'dsh-btw-card-meta' },
             [EXPLORE_RELATIONS[card.relation], card.nativeSessionId ? null : `${card.turnCount} 轮问答`,
-              card.context?.truncated ? '引用上下文已截取' : null].filter(Boolean).join(' · ')),
+              card.context?.truncated ? '引用较长，已保留部分内容' : null].filter(Boolean).join(' · ')),
         ),
         readError && h('div', { className: 'dsh-btw-banner dsh-btw-error', role: 'alert' },
           h('span', null, readError), exploreButton('重新加载', { onClick: refresh })),
@@ -593,7 +593,7 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
         !composer && card && confirmRemove === card.id && h('div', { className: 'dsh-btw-banner' },
           h('span', { role: 'status' }, removal.running ? '请先停止这一支中正在生成的回答。'
             : `${removal.count ? `从树中移除这张卡及其 ${removal.count} 张后代？` : '从树中移除这张卡片？'}${
-              removal.hasNativeSession ? ' 已发送的原生聊天仍可在 DSH 会话列表中打开。' : ''}`),
+              removal.hasNativeSession ? ' 对话记录仍可在 DSH 会话列表中查看。' : ''}`),
           h('div', { className: 'dsh-btw-inline-actions' },
             exploreButton('取消', { onClick: () => setConfirmRemove(null) }, 'quiet'),
             exploreButton('确认删除', { onClick: removeSelected, disabled: blocked || removal.running }, 'danger'),
@@ -609,22 +609,22 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
         card?.nativeSessionId && isPage && renderNative ? h(React.Fragment, null,
           h('div', { className: 'dsh-btw-native-source' }, sourceBlock(card.source, sourceParentId, sourceTurnId)),
           card.nativeReady ? renderNative(card, sessionId)
-            : h('div', { className: 'dsh-btw-banner' }, '卡片还未完成初始化。',
-              exploreButton('打开原生对话', { disabled: blocked, onClick: prepareNative })),
+            : h('div', { className: 'dsh-btw-banner' }, '对话尚未打开，请重试。',
+              exploreButton('打开对话', { disabled: blocked, onClick: prepareNative })),
         ) : h('div', { className: 'dsh-btw-scroller', ref: bodyRef, onScroll: rememberScroll },
           h('div', { className: 'dsh-btw-read-column' },
             composer ? h(React.Fragment, null,
               sourceBlock({ ...composer.source, quote: composer.quote }, composer.parentId, composer.anchorTurnId, composer.anchorQuestion, composer.turnNumber),
               preparingNative ? operationError
                 ? exploreButton('重试打开', { disabled: blocked, onClick: prepareNative })
-                : h('p', { className: 'dsh-btw-start-copy', role: 'status' }, '正在准备原生对话…')
+                : h('p', { className: 'dsh-btw-start-copy', role: 'status' }, '正在打开对话…')
                 : h('p', { className: 'dsh-btw-start-copy' }, composer.relation === 'branch'
                 ? '从选定轮次接着问，后续问答会记录在这条分支。'
                 : composer.relation === 'child' ? '围绕选定的回答提一个新问题。'
                   : composer.quote ? '可以围绕引用追问细节、例子或相关概念。' : '提出一个想在探索里单独讨论的问题。'),
             ) : card ? h(React.Fragment, null,
               sourceBlock(card.source, sourceParentId, sourceTurnId),
-              card.nativeSessionId && exploreButton('打开原生对话', { onClick: (event) => openSavedExplorerPage(sessionId, card.id, event.currentTarget) }, 'primary'),
+              card.nativeSessionId && exploreButton('打开对话', { onClick: (event) => openSavedExplorerPage(sessionId, card.id, event.currentTarget) }, 'primary'),
               card.turns.map(renderTurn),
             ) : h('div', { className: 'dsh-btw-empty' },
               isPage && selectedId && reading?.cardId === selectedId && !readError ? h('p', { role: 'status' }, '这张卡片已移除。')

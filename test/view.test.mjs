@@ -12,11 +12,11 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
 const { createRoot } = await import('react-dom/client');
 const read = (file) => fs.readFileSync(new URL(`../src/${file}.js`, import.meta.url), 'utf8');
-const { ExploreView, ExplorePages, openExplorerPage, exploreRootDraft } = Function('React', 'h', `
+const { ExploreView, ExplorePages, openExplorerPage, exploreRootDraft, exploreNodeLayout } = Function('React', 'h', `
   ${read('view')}
   ${read('navigation')}
   ${read('pages')}
-  return { ExploreView, ExplorePages, openExplorerPage, exploreRootDraft };
+  return { ExploreView, ExplorePages, openExplorerPage, exploreRootDraft, exploreNodeLayout };
 `)(React, React.createElement);
 
 const deferred = () => {
@@ -171,6 +171,23 @@ test('预览失败保留草稿并复用请求 ID，保存后续问并从首轮�
   assert.equal(view.source(), undefined, 'dismissing a page does not navigate to the chat tab');
 });
 
+test('圆点导航按纵向大纲排列，大量同级卡和深层子卡不会撑宽导航', () => {
+  const parent = makeCard();
+  const siblings = Array.from({ length: 30 }, () => makeCard(randomUUID(), { parentId: parent.id }));
+  const nested = [];
+  for (let index = 0; index < 30; index += 1) {
+    nested.push(makeCard(randomUUID(), { parentId: nested.at(-1)?.id ?? siblings[0].id }));
+  }
+  const compact = exploreNodeLayout([parent, siblings[0]]);
+  const full = exploreNodeLayout([parent, ...siblings, ...nested]);
+  assert.equal(full.width, compact.width, '节点增加只能增加导航高度');
+  assert.equal(new Set(full.nodes.map((node) => node.y)).size, full.nodes.length, '每个节点应独占一行');
+  for (const node of full.nodes) {
+    assert.ok(node.x >= 17 && node.x + 17 <= full.width, '圆点点击区应完整留在导航宽度内');
+    if (node.parent) assert.ok(node.y > node.parent.y, '子卡位于来源卡下方');
+  }
+});
+
 test('独立的圆点导航保持焦点，切换同级卡后回到父卡会还原草稿和阅读位置', async (t) => {
   const parent = makeCard();
   const child = makeCard(randomUUID(), { title: '第一个子卡', parentId: parent.id, relation: 'child' });
@@ -198,12 +215,12 @@ test('独立的圆点导航保持焦点，切换同级卡后回到父卡会还�
   assert.equal(view.layers()[0].hasAttribute('inert'), true);
   assert.equal(view.surface().hasAttribute('inert'), false);
   const map = navigation.querySelector('.dsh-btw-map-viewport');
-  map.scrollLeft = 44;
+  map.scrollTop = 44;
   await view.refresh();
-  assert.equal(map.scrollLeft, 44, 'a refresh must not snap the graph away from the nodes being browsed');
-  Object.defineProperty(map, 'clientWidth', { value: 36 });
+  assert.equal(map.scrollTop, 44, '轮询不应打断正在浏览的导航位置');
+  Object.defineProperty(map, 'clientHeight', { value: 36 });
   window.dispatchEvent(new window.Event('resize'));
-  assert.equal(map.scrollLeft, 0, 'the selected column comes back into view when the window changes size');
+  assert.equal(map.scrollTop, parseFloat(node(child.title).style.top) - 18, '窗口变化后当前圆点应回到可视范围');
   await choose(sibling.title);
   await act(async () => {
     node(child.title).click();

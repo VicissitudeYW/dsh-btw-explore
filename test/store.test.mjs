@@ -37,7 +37,7 @@ test('future and damaged databases are rejected without overwriting data', (t) =
   const db = new DatabaseSync(future);
   db.exec('PRAGMA user_version = 999; CREATE TABLE evidence(note TEXT); INSERT INTO evidence VALUES (\'preserve\')');
   db.close();
-  assert.throws(() => createStore(future), /更高版本/);
+  assert.throws(() => createStore(future), /请更新 dsh-btw-explore/);
   const check = new DatabaseSync(future);
   assert.equal(check.prepare('SELECT note FROM evidence').get().note, 'preserve');
   check.close();

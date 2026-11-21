@@ -1,4 +1,5 @@
 const EXPLORE_NODE_STEP = 36;
+const EXPLORE_MAP_WIDTH = 54;
 
 function exploreNodeLayout(cards) {
   const byId = new Map(cards.map((card) => [card.id, card]));
@@ -10,40 +11,35 @@ function exploreNodeLayout(cards) {
   }
   const nodes = [];
   const visited = new Set();
-  let lane = 0;
-  let height = 0;
   function place(card, depth, parent) {
-    const node = { card, depth, parent };
+    const node = { card, depth, parent,
+      x: 18 + Math.min(depth, 2) * 9,
+      y: (nodes.length + 0.5) * EXPLORE_NODE_STEP,
+    };
     nodes.push(node);
-    height = Math.max(height, depth + 1);
     if (card) visited.add(card.id);
     const branches = (children.get(card?.id ?? null) ?? []).filter((item) => !visited.has(item.id));
-    const firstLane = lane;
     for (const branch of branches) if (!visited.has(branch.id)) place(branch, depth + 1, node);
-    if (firstLane === lane) lane += 1;
-    node.x = ((firstLane + lane) / 2) * EXPLORE_NODE_STEP;
-    node.y = (depth + 0.5) * EXPLORE_NODE_STEP;
   }
   place(null, 0, null);
-  return { nodes, byId, width: lane * EXPLORE_NODE_STEP, height: height * EXPLORE_NODE_STEP };
+  return { nodes, byId, width: EXPLORE_MAP_WIDTH, height: nodes.length * EXPLORE_NODE_STEP };
 }
 
 function ExploreNavigation({ cards, activeId, onNavigate, returnLabel }) {
   const { nodes, byId, width, height } = React.useMemo(() => exploreNodeLayout(cards), [cards]);
   const viewport = React.useRef(null);
   const currentNode = nodes.find(({ card }) => (card?.id ?? null) === activeId);
-  const { x: activeX, y: activeY } = currentNode ?? {};
+  const activeY = currentNode?.y;
   React.useLayoutEffect(() => {
     const area = viewport.current;
-    if (!area || activeX === undefined) return;
+    if (!area || activeY === undefined) return;
     function keepCurrentInView() {
-      area.scrollLeft = Math.max(0, activeX - area.clientWidth / 2);
       area.scrollTop = Math.max(0, activeY - area.clientHeight / 2);
     }
     keepCurrentInView();
     window.addEventListener('resize', keepCurrentInView);
     return () => window.removeEventListener('resize', keepCurrentInView);
-  }, [activeId, activeX, activeY, width, height]);
+  }, [activeId, activeY, height]);
   if (!cards.length) return null;
   const activePath = new Set();
   for (let node = currentNode; node; node = node.parent) activePath.add(node);
@@ -52,11 +48,10 @@ function ExploreNavigation({ cards, activeId, onNavigate, returnLabel }) {
     h('div', { className: 'dsh-btw-map-viewport', ref: viewport },
       h('div', { className: 'dsh-btw-map-graph', style: { width, height } },
         nodes.filter((node) => node.parent).map((node) => {
-          const dx = node.x - node.parent.x;
-          const dy = node.y - node.parent.y;
           return h('span', { key: node.card.id, className: 'dsh-btw-map-edge', 'aria-hidden': true,
             'data-btw-on-path': activePath.has(node) || undefined,
-            style: { left: node.parent.x, top: node.parent.y, width: Math.hypot(dx, dy), transform: `rotate(${Math.atan2(dy, dx)}rad)` },
+            style: { left: node.parent.x, top: node.parent.y,
+              width: node.x - node.parent.x, height: node.y - node.parent.y },
           });
         }),
         nodes.map((node) => {

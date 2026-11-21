@@ -3,6 +3,7 @@
  *
  * node test/host-smoke.mjs [--serve] [--fixture-only] [--package=path-to-tgz] [--toolbar]
  * DSH_DESKTOP_ROOT may point at a different installed Desktop directory.
+ * DSH_TOOLBAR_ROOT may point at a complete dsh-message-toolbar checkout.
  * Every run creates its own temporary home, workspace, logs and provider.
  * --serve leaves only this test's services running for a browser check; Ctrl+C
  * stops them. The browser must use the printed authenticated test URL.
@@ -35,6 +36,21 @@ const fixtureOnly = args.has('--fixture-only');
 const withToolbar = args.has('--toolbar');
 const archive = [...args].find((arg) => arg.startsWith('--package='))?.slice('--package='.length);
 const requests = [];
+const mainQuestion = '天空为什么是蓝色的？';
+const question = '蓝光为什么更容易被散射？';
+const followQuestion = '那紫光为什么没有让天空变成紫色？';
+const branchQuestion = '夕阳为什么常常是红色的？';
+const firstNativeQuestion = '日落时的光经过了更厚的大气吗？';
+const childQuestion = '“瑞利散射”是什么意思？';
+const quote = '瑞利散射';
+const showcaseAnswers = new Map([
+  [mainQuestion, '太阳光看起来是白色的，其实包含多种颜色。光进入大气后，空气分子会把它散射到各个方向。\n\n蓝光的波长较短，比红光更容易被散射。因此，白天从天空各处进入眼睛的光里，蓝光更突出，我们便看到了蓝天。'],
+  [question, '这与光的波长有关。对远小于光波长的空气分子来说，瑞利散射的强度与波长的四次方成反比。\n\n蓝光的波长比红光短，所以更容易改变传播方向，散布到天空各处。'],
+  [followQuestion, '紫光确实更容易被散射，但太阳光中的紫光较少，人眼对紫光也不如对蓝光敏感。\n\n综合太阳光谱、大气散射和人眼的颜色感知，白天的天空通常呈现蓝色。'],
+  [branchQuestion, '日落时，太阳光斜穿大气，走过的路程比正午更长。短波长的蓝光在途中被散射得更多，抵达眼睛的直射光便以红、橙等颜色为主。\n\n空气中的尘埃和小水滴也会影响晚霞的颜色。'],
+  [firstNativeQuestion, '是的，更准确地说，是光在大气中走过的路程更长。\n\n正午时，阳光近乎竖直穿过大气；日落时，阳光沿较倾斜的方向进入。瑞利散射使蓝光在这段更长的路途中更容易离开原来的方向，剩下的直射光就偏红了。'],
+  [childQuestion, '瑞利散射是光被远小于自身波长的微小粒子散射的现象，空气中的氮气和氧气分子就是例子。\n\n它对短波长的光更强：波长减半时，散射强度约变成原来的 16 倍。这能帮助解释白天的蓝天和日落时偏红的太阳。'],
+]);
 let host;
 let provider;
 let hostRun = 0;
@@ -113,9 +129,11 @@ async function startProvider() {
       const base = { id, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: 'smoke-model' };
       const send = (delta, finish_reason = null) => res.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta, finish_reason }] })}\n\n`);
       send({ role: 'assistant', content: '' });
-      for (const text of ['本地烟测回答：', '这是一段', '分块返回的', '旁路解释。']) {
+      const prompt = body.messages?.findLast((message) => message.role === 'user' && showcaseAnswers.has(message.content));
+      const answer = showcaseAnswers.get(prompt?.content) ?? showcaseAnswers.get(mainQuestion);
+      for (let offset = 0; offset < answer.length; offset += 32) {
         if (res.destroyed) return;
-        send({ content: text });
+        send({ content: answer.slice(offset, offset + 32) });
         await pause(120);
       }
       send({}, 'stop');
@@ -172,7 +190,8 @@ async function prepareProfile(baseURL) {
     fs.symlinkSync(project, path.join(profile, 'node_modules', 'dsh-btw-explore'), process.platform === 'win32' ? 'junction' : 'dir');
   }
   if (withToolbar) {
-    const toolbarRoot = path.resolve(project, '../dsh-message-toolbar');
+    const toolbarRoot = path.resolve(process.env.DSH_TOOLBAR_ROOT ?? path.join(project, '../dsh-message-toolbar'));
+    assert.ok(fs.existsSync(path.join(toolbarRoot, 'cordis.patch.yml')), `Message toolbar bundle missing: ${toolbarRoot}`);
     const manifestPath = path.join(profile, 'package.json');
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     manifest.dependencies['dsh-message-toolbar'] = `link:${toolbarRoot.replaceAll('\\', '/')}`;
@@ -209,7 +228,7 @@ async function prepareProfile(baseURL) {
         defaultInput: [text]
         models:
           - id: smoke-model
-            name: Local smoke model
+            name: 本地模型
             reasoningEfforts: false
 `);
   await childCommand(['--profile', 'btw-smoke', '--dump-config'], 'composed-smoke-config.yml');
@@ -322,7 +341,7 @@ try {
     const response = await fetch(`${baseURL}/chat/completions`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer local-test-not-a-real-key' }, body: JSON.stringify({ model: 'smoke-model', stream: true, messages: [{ role: 'user', content: 'local fixture self-check' }] }) });
     assert.equal(response.status, 200);
     const result = await response.text();
-    assert.ok(result.includes('本地烟测回答：') && result.includes('[DONE]'));
+    assert.ok(result.includes('太阳光') && result.includes('[DONE]'));
     pass('local fake OpenAI streaming fixture');
   } else {
     assert.ok(fs.existsSync(path.join(project, 'lib/index.js')), 'Build/finish the plugin host entry before the integration smoke');
@@ -342,7 +361,7 @@ try {
     const sessionId = created.sessionId;
     evidence.sessionId = sessionId;
     pass('native session create API', sessionId);
-    await rpc('session/prompt', { sessionId, requestId: randomUUID(), mode: 'queue', content: [{ type: 'text', text: '主聊天烟测问题：请给出简短说明。' }] });
+    await rpc('session/prompt', { sessionId, requestId: randomUUID(), mode: 'queue', content: [{ type: 'text', text: mainQuestion }] });
     const address = { kind: 'session', sessionId };
     const before = await poll(() => rpc('session/events', { address, maxMessages: 100 }),
       (value) => JSON.stringify(value).includes('"turn/end"'), 'main fake-provider turn');
@@ -358,7 +377,6 @@ try {
 
     const cardId = `card-${randomUUID()}`;
     const turnId = `turn-${randomUUID()}`;
-    const question = '独立旁路烟测问题：请解释主聊天中的说明。';
     const count = requests.length;
     const pending = await json('/api/dsh-btw-explore', { action: 'create', sessionId, cardId, turnId, relation: 'root', question, preview: true });
     const query = `/api/dsh-btw-explore?sessionId=${encodeURIComponent(sessionId)}&cardId=${encodeURIComponent(cardId)}`;
@@ -369,16 +387,15 @@ try {
     const completed = await poll(() => json(query), (value) => value.card?.turns.some((turn) => turn.id === turnId && turn.status !== 'running'), 'side card model completion');
     const turn = completed.card.turns.find((value) => value.id === turnId);
     assert.equal(turn.status, 'done', JSON.stringify(turn));
-    assert.ok(turn.answer.includes('本地烟测回答：'));
+    assert.equal(turn.answer, showcaseAnswers.get(question));
     const sideRequest = requests.slice(count).find((entry) => entry.accepted && entry.completed);
     assert.ok(sideRequest, 'Side card must reach the actual model adapter and local HTTP provider');
     const sideMessages = sideRequest.messages.map(({ role, content }) => ({ role, content }));
-    assert.equal(sideMessages.some(({ content }) => String(content).includes('主聊天烟测问题')), true);
+    assert.equal(sideMessages.some(({ content }) => String(content).includes(mainQuestion)), true);
     assert.equal(sideMessages.some(({ content }) => String(content).includes('<system-reminder>')), false);
     pass('side card fake model streaming completed');
     pass('side request contains chat text and excludes host runtime reminders');
     await json('/api/dsh-btw-explore', { action: 'save', sessionId, cardId });
-    const followQuestion = '续问烟测问题：继续解释上下文。';
     const followTurnId = `turn-${randomUUID()}`;
     await json('/api/dsh-btw-explore', { action: 'ask', sessionId, cardId, turnId: followTurnId, question: followQuestion });
     const saved = await poll(() => json(query), (value) => value.card?.turns.some((turn) => turn.id === followTurnId && turn.status !== 'running'), 'card follow-up completion');
@@ -387,7 +404,6 @@ try {
 
     const branchId = `card-${randomUUID()}`;
     const branchTurnId = `turn-${randomUUID()}`;
-    const branchQuestion = '分支烟测问题：从第一轮继续。';
     await json('/api/dsh-btw-explore', { action: 'create', sessionId, cardId: branchId, turnId: branchTurnId,
       relation: 'branch', parentId: cardId, anchorTurnId: turnId, question: branchQuestion });
     const branchQuery = `/api/dsh-btw-explore?sessionId=${encodeURIComponent(sessionId)}&cardId=${encodeURIComponent(branchId)}`;
@@ -418,19 +434,20 @@ try {
         (value) => JSON.stringify(value).includes(text) && JSON.stringify(value).includes('turn/end'), 'native card durable reply');
       return { call, snapshot };
     }
-    const firstNativeQuestion = '原生子卡首问，仅在自己的分支里。';
     const { call: nativeCall, snapshot: nativeSnapshot } = await nativePrompt(nativeCard.nativeSessionId, firstNativeQuestion);
     assert.ok(JSON.stringify(nativeCall.messages).includes(question));
     assert.ok(!JSON.stringify(nativeCall.messages).includes(followQuestion));
+    assert.ok(JSON.stringify(nativeSnapshot).includes(showcaseAnswers.get(firstNativeQuestion).split('\n')[0]));
     pass('native composer RPC uses only the designated source prefix and opens without generating');
 
     const childId = `card-${randomUUID()}`;
     const child = await json('/api/dsh-btw-explore', { action: 'open-native', sessionId, cardId: childId,
-      relation: 'child', parentId: nativeCardId, source: { turn: 1, role: 'assistant' }, quote: '分块返回' });
-    const { call: nativeChildCall } = await nativePrompt(child.nativeSessionId, '请解释选中的三个字。');
+      relation: 'child', parentId: nativeCardId, source: { turn: 1, role: 'assistant' }, quote });
+    const { call: nativeChildCall, snapshot: childSnapshot } = await nativePrompt(child.nativeSessionId, childQuestion);
     const childInput = JSON.stringify(nativeChildCall.messages);
-    assert.ok(childInput.includes(firstNativeQuestion) && childInput.includes('分块返回'));
+    assert.ok(childInput.includes(firstNativeQuestion) && childInput.includes(quote));
     assert.ok(!childInput.includes(question), 'A native child only sees its anchor, not the inherited prefix');
+    assert.ok(JSON.stringify(childSnapshot).includes(showcaseAnswers.get(childQuestion).split('\n')[0]));
     pass('native card can spawn a quoted child with only the anchor context');
     const after = await rpc('session/events', { address, maxMessages: 100 });
     assert.deepEqual(after, before, 'Independent side questions must not append any main-session events');

@@ -1,23 +1,23 @@
 # dsh-btw-explore
 
-DSH 的旁路问答卡片树。新卡在来源聊天上方打开，使用 DSH 的原生对话和输入框。可以从回答中划选内容建立子卡，也可以从指定轮次另开分支。卡片和对话保存在本机，重启 DSH 后可从「探索」回看。
+DSH 的旁路问答卡片树。在原页面上方打开子卡，沿用 DSH 的对话界面与输入框。可以围绕回答中的一段文字继续提问，也可以从某一轮另开分支。卡片和对话保存在本机，重启 DSH 后可从「探索」回看。
 
-![DSH 的原生子卡和独立悬浮的圆点导航](docs/showcase/native-card-map.jpg)
+![覆盖式子卡与右侧悬浮圆点导航](docs/showcase/native-card-map.jpg)
 
-## 使用
+## 用法
 
-在聊天回答下方点「探索」，或划词后点「探索引用」，就能打开一张卡。用原生输入框发送和追问，也可以切换模型、添加附件或调用指令。依赖对话区插槽的插件可随原生界面加载，已验证 `dsh-message-toolbar` 的回答编辑。依赖主窗口独有区域的插件需要单独适配。
+在聊天回答下方点「探索」，或划词后点「探索引用」，就能打开一张卡。可以发送和追问、切换模型、添加附件或调用指令。对话区插件也能使用，已验证 `dsh-message-toolbar` 的回答编辑；依赖主窗口专属区域的插件需要单独适配。
 
 - **根卡片**：从当前主聊天的最近完整文本轮次开始；从某条回答进入时，固定到那条消息。
 - **子卡**：围绕所选轮次的问题和回答展开。划选了回答中的一段时，只带入该段回答。
 - **分支**：继承来源卡的起始上下文，以及从第一轮到指定轮次的问答。后续轮次不会进入分支。
 - **卡内追问**：继续当前卡片的对话，不读取其他分支。
 
-完成的回答有「新建子卡」和「从此轮分支」，会在当前卡上再开一层。圆点导航独立悬浮在卡片右侧，连线标出来源，实心点表示当前卡。点击圆点可以切换同级卡或回到父卡，卡片会轻微滑入并淡入。父卡的阅读位置和草稿会保留，窄窗下导航也可以单独滚动。点「返回上层」或按 `Esc` 可以逐层返回。顶部「探索」可以浏览全部卡片，选中后点「打开原生对话」回看。
+完成的回答有「新建子卡」和「从此轮分支」，会在当前卡上再开一层。圆点和连线直接悬浮在右侧，像大纲一样纵向排列，实心点表示当前卡。点击圆点可以切换同级卡或回到父卡，并播放滑入、淡入动画。父卡的阅读位置和草稿会保留。点「返回上层」或按 `Esc` 可以逐层返回。顶部「探索」可以浏览全部卡片，选中后点「打开对话」回看。
 
-子卡使用独立的普通 DSH 会话，首选模型和工作区来自主会话，后续可以在子卡内独立选择。发过消息的子卡也会出现在 DSH 的「未分组」会话列表。打开新卡时就会在树中保存节点，关闭空卡后仍可回来继续。移除卡片会同时移除后代，已发送的原生聊天仍可从 DSH 会话列表打开。
+子卡有自己的对话记录，初始模型和工作区来自主聊天，之后可以独立选择。发过消息的子卡也会出现在 DSH 的「未分组」会话列表。关闭空卡后仍可从树中回来继续。移除卡片会同时移除后代，对话记录仍可从 DSH 会话列表打开。
 
-`0.1.x` 和 `0.2.x` 中创建的旧卡继续用原来的文本问答和预览。你可以从旧卡的已完成回答创建原生子卡或原生分支。
+`0.1.x` 和 `0.2.x` 创建的旧卡仍可查看和追问，也可以从已完成的回答创建新子卡或分支。
 
 ## 安装
 
@@ -33,15 +33,15 @@ npm pack
 在需要使用的 profile 安装本地包，随后重启对应 DSH 实例：
 
 ```powershell
-$dshPackage = (Resolve-Path -LiteralPath './dsh-btw-explore-0.3.1.tgz').Path.Replace('\', '/')
+$dshPackage = (Resolve-Path -LiteralPath './dsh-btw-explore-0.3.2.tgz').Path.Replace('\', '/')
 dsh plugin --profile desktop add "file:$dshPackage"
 ```
 
-Web profile 将 `desktop` 改为 `web`。插件发布包没有运行时 npm 依赖，React 与 Markdown 渲染器使用宿主提供的实例。本机桌面版若没有将 `dsh` 加入 `PATH`，可以从 PowerShell 调用随桌面版安装的 CLI：
+Web profile 将 `desktop` 改为 `web`。本机桌面版若没有将 `dsh` 加入 `PATH`，可以从 PowerShell 调用随桌面版安装的 CLI：
 
 ```powershell
 $dshInstall = Read-Host '输入 DeepSeek Harness 安装目录'
-$dshPackage = (Resolve-Path -LiteralPath './dsh-btw-explore-0.3.1.tgz').Path.Replace('\', '/')
+$dshPackage = (Resolve-Path -LiteralPath './dsh-btw-explore-0.3.2.tgz').Path.Replace('\', '/')
 $env:ELECTRON_RUN_AS_NODE = '1'
 try {
   & "$dshInstall/DeepSeek Harness.exe" --expose-internals `
@@ -54,11 +54,9 @@ try {
 
 ## 数据和上下文
 
-卡片关系和来源快照保存在 `$DSH_HOME/btw-explore/cards.sqlite`，未指定 `DSH_HOME` 时为 `~/.dsh/btw-explore/cards.sqlite`。原生子卡的聊天记录由 DSH 保存，完整备份需要包括 DSH 的会话数据和卡片数据库。主聊天日志提供来源快照，子卡的对话历史独立保存。
+卡片关系和来源内容保存在 `$DSH_HOME/btw-explore/cards.sqlite`，未指定 `DSH_HOME` 时为 `~/.dsh/btw-explore/cards.sqlite`。对话记录由 DSH 保存，完整备份需要同时包含 DSH 的会话数据和卡片数据库。
 
-建卡时固定来源文本，后续追问不会改变已建分支的快照。继承的文本上限为 24,000 字符，选区引用上限为 4,000 字符。快照只提取问答文本。每个主会话最多 500 张卡。新卡的发送和生成由 DSH 管理，移除原生节点后该节点的来源快照也会从卡片数据库移除。
-
-旧卡的问答同样保存在 SQLite。旧问答支持流式生成和重试，强制退出后未完成轮次最多约 20 秒后显示「中断」。
+建卡时固定来源文本，后续追问不会改变已有分支的来源。带入的问答文本上限为 24,000 字符，选区引用上限为 4,000 字符，每个主聊天最多 500 张卡。
 
 ## 致谢
 
@@ -69,9 +67,11 @@ try {
 ```powershell
 npm test
 node test/host-smoke.mjs
-node test/host-smoke.mjs '--package=./dsh-btw-explore-0.3.1.tgz'
+node test/host-smoke.mjs '--package=./dsh-btw-explore-0.3.2.tgz'
 ```
 
-单测覆盖来源边界、分支上下文、跨会话隔离、取消和重试、SQLite 恢复和 React 交互。烟测使用独立临时 DSH home 和本地测试模型服务，检查宿主认证、流式问答及进程重启恢复。测试日志在命令打印的临时目录，验收详情见[验证记录](docs/verification.md)。
+测试使用临时 DSH profile 和本地模拟模型，详情见[验证记录](docs/verification.md)。
 
-许可：MIT。
+## 许可证
+
+[MIT](LICENSE)
