@@ -1,0 +1,248 @@
+.dsh-btw-head {
+  padding: 16px 24px 15px;
+}
+
+.dsh-btw-head-path {
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.dsh-btw-crumbs {
+  gap: 8px;
+  line-height: 1.4;
+}
+
+.dsh-btw-crumb-origin,
+.dsh-btw-source-origin {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dsh-btw-crumb-origin {
+  flex-shrink: 0;
+}
+
+.dsh-btw-chrome-icon {
+  display: block;
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.dsh-btw-crumb-origin .dsh-btw-chrome-icon {
+  width: 15px;
+  height: 15px;
+  opacity: .8;
+}
+
+.dsh-btw-crumb {
+  gap: 8px;
+  min-width: 0;
+  max-width: 180px;
+}
+
+.dsh-btw-crumb > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dsh-btw-crumb-divider {
+  flex: none;
+  width: 4px;
+  height: 4px;
+  opacity: .6;
+}
+
+.dsh-btw-head-title {
+  align-items: start;
+  gap: 12px;
+}
+
+.dsh-btw-head-title h2 {
+  padding-block: 2px;
+  font-size: 18px;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+.dsh-btw-card-meta {
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+.dsh-btw-explore .dsh-btw-chrome-action {
+  gap: 6px;
+  min-height: 32px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  color: var(--btw-muted);
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.dsh-btw-control-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dsh-btw-explore .dsh-btw-chrome-action:hover:not(:disabled) {
+  color: var(--btw-ink);
+  background: var(--btw-hover);
+}
+
+.dsh-btw-explore .dsh-btw-chrome-action:active:not(:disabled) {
+  background: var(--btw-selected);
+}
+
+.dsh-btw-explore .dsh-btw-chrome-action:focus-visible {
+  outline-offset: 1px;
+}
+
+.dsh-btw-explore-page .dsh-btw-head-path > .dsh-btw-chrome-action {
+  min-height: 32px;
+}
+
+.dsh-btw-head-title > .dsh-btw-remove {
+  margin-inline-end: -8px;
+}
+
+.dsh-btw-explore .dsh-btw-remove:hover:not(:disabled),
+.dsh-btw-explore .dsh-btw-remove:active:not(:disabled) {
+  color: var(--btw-error);
+  background: color-mix(in srgb, var(--btw-error) 7%, transparent);
+}
+
+.dsh-btw-source {
+  margin-bottom: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.dsh-btw-source-head {
+  gap: 12px;
+  min-height: 32px;
+}
+
+.dsh-btw-source-origin {
+  flex: 1;
+  color: var(--btw-muted);
+}
+
+.dsh-btw-source-origin > .dsh-btw-chrome-icon {
+  opacity: .8;
+}
+
+.dsh-btw-source-label {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.dsh-btw-source-head .dsh-btw-source-return {
+  gap: 5px;
+  min-height: 32px;
+  padding: 4px 6px;
+  margin-inline-end: -6px;
+  font-size: 12px;
+}
+
+.dsh-btw-source-return .dsh-btw-chrome-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.dsh-btw-quoted {
+  margin: 3px 0 0 24px;
+  max-width: 66ch;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.dsh-btw-quoted summary {
+  list-style-position: outside;
+}
+
+.dsh-btw-quote-preview {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.dsh-btw-quoted-full {
+  padding-top: 10px;
+}
+
+.dsh-btw-native-source {
+  padding: 10px 24px 0;
+}
+
+.dsh-btw-native-source .dsh-btw-source {
+  max-height: min(160px, 24dvh);
+  margin-bottom: 4px;
+  padding-bottom: 4px;
+}
+
+.dsh-btw-native-source .dsh-btw-source-return {
+  margin-inline-end: 0;
+}
+
+.dsh-btw-native-source .dsh-btw-source-return:focus-visible {
+  outline-offset: -2px;
+}
+
+@container btw-explore (max-width: 700px) {
+  .dsh-btw-head {
+    padding: 12px 16px 13px;
+  }
+
+  .dsh-btw-head-path {
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .dsh-btw-head-title h2 {
+    font-size: 17px;
+  }
+
+  .dsh-btw-native-source {
+    padding: 8px 16px 0;
+  }
+}
+
+@container btw-explore (max-width: 390px) {
+  .dsh-btw-head-path {
+    align-items: center;
+    gap: 6px;
+  }
+
+  .dsh-btw-head-path .dsh-btw-crumb-origin > .dsh-btw-chrome-icon {
+    display: none;
+  }
+
+  .dsh-btw-explore .dsh-btw-chrome-action {
+    gap: 4px;
+    padding-inline: 5px;
+  }
+
+  .dsh-btw-head-title h2 {
+    font-size: 16px;
+  }
+
+  .dsh-btw-source-head {
+    flex-wrap: wrap;
+    gap: 0 8px;
+  }
+
+  .dsh-btw-source-origin {
+    flex-basis: 150px;
+  }
+
+  .dsh-btw-source-return {
+    margin-inline-start: auto;
+  }
+}

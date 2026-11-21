@@ -9,7 +9,7 @@ const output = `window.__ModuleLoader__.load({
   factory: (require) => {
     const React = require('react');
     const h = React.createElement;
-    const EXPLORE_CSS = ${JSON.stringify(read('src/explore.css'))};
+    const EXPLORE_CSS = ${JSON.stringify(['src/explore.css', 'src/chrome.css', 'src/navigation.css', 'src/motion.css'].map(read).join('\n'))};
     ${read('src/view.js')}
     ${read('src/navigation.js')}
     ${read('src/pages.js')}

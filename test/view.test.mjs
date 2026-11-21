@@ -201,8 +201,7 @@ test('独立的圆点导航保持焦点，切换同级卡后回到父卡会还�
   const choose = async (title) => {
     const button = node(title);
     assert.ok(button, `找得到节点 ${title}`);
-    button.focus();
-    await act(async () => button.click());
+    await act(async () => { button.focus(); button.click(); });
     assert.equal(document.activeElement, button);
     assert.equal(button.getAttribute('aria-current'), 'page');
     assert.equal(view.surface().querySelector('h2').textContent, title);
@@ -219,7 +218,7 @@ test('独立的圆点导航保持焦点，切换同级卡后回到父卡会还�
   await view.refresh();
   assert.equal(map.scrollTop, 44, '轮询不应打断正在浏览的导航位置');
   Object.defineProperty(map, 'clientHeight', { value: 36 });
-  window.dispatchEvent(new window.Event('resize'));
+  await act(async () => window.dispatchEvent(new window.Event('resize')));
   assert.equal(map.scrollTop, parseFloat(node(child.title).style.top) - 18, '窗口变化后当前圆点应回到可视范围');
   await choose(sibling.title);
   await act(async () => {

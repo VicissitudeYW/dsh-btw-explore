@@ -44,6 +44,26 @@ function exploreButton(label, props = {}, tone = '') {
   return h('button', { type: 'button', className: `dsh-btw-button${tone ? ` dsh-btw-${tone}` : ''}`, ...props }, label);
 }
 
+function exploreChromeIcon(name) {
+  const paths = {
+    explore: ['M7 3H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3', 'M8 7h12v14H8z'],
+    back: ['M19 12H5', 'm11 6-6 6 6 6'],
+    source: ['M9 5H4v5h5V5Zm0 5c0 4-1 6-4 8', 'M20 5h-5v5h5V5Zm0 5c0 4-1 6-4 8'],
+    return: ['m9 5-5 5 5 5', 'M4 10h10a5 5 0 0 1 5 5v4'],
+    remove: ['M4 7h16', 'M9 7V4h6v3', 'm6 7 1 13h10l1-13', 'M10 11v5', 'M14 11v5'],
+  };
+  return h('svg', { className: 'dsh-btw-chrome-icon', key: 'icon', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
+    strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true, focusable: false,
+  }, (paths[name] ?? paths.back).map((d, index) => h('path', { d, key: index })));
+}
+
+function exploreChromeButton(label, icon, props = {}, variant = '') {
+  return exploreButton([
+    exploreChromeIcon(icon),
+    h('span', { className: 'dsh-btw-control-label', key: 'label' }, label),
+  ], { ...props, className: `dsh-btw-button dsh-btw-quiet dsh-btw-chrome-action${variant ? ` dsh-btw-${variant}` : ''}` });
+}
+
 function isCoveredExploreReader(element) {
   const page = element.closest('.dsh-btw-page');
   return page ? !page.hasAttribute('data-btw-top') : Boolean(document.querySelector('.dsh-btw-overlay'));
@@ -51,7 +71,7 @@ function isCoveredExploreReader(element) {
 
 // The client build supplies the renderer's React instance, including the Markdown renderer.
 function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard, onReadCards, onNavigate, onChat, onClosePage,
-  pageTitleId, returnLabel, request, Markdown, renderNative, nativeCards = Boolean(renderNative) }) {
+  pageTitleId, returnLabel, request, Markdown, renderNative, nativeCards = Boolean(renderNative), isPageClosing = false }) {
   const { useEffect, useLayoutEffect, useMemo, useRef, useState } = React;
   const isPage = Boolean(onClosePage);
   const preferences = useMemo(() => isPage ? null : explorePreferences(sessionId), [sessionId, isPage]);
@@ -104,7 +124,7 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
   const refreshing = reading?.revision !== reload;
   const blocked = Boolean(pending) || refreshing;
   const preparingNative = Boolean(isPage && composer && renderNative);
-  const readyToPrepare = preparingNative && !refreshing;
+  const readyToPrepare = preparingNative && !refreshing && !isPageClosing;
 
   function updateSelected(id) {
     currentId.current = id;
@@ -336,6 +356,7 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
   }
 
   function prepareNative() {
+    if (isPageClosing) return;
     const draft = currentComposer.current;
     const id = nativeDraftId.current ??= crypto.randomUUID();
     const body = draft ? { cardId: id, relation: draft.relation, source: draft.source,
@@ -345,7 +366,6 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
 
   function startFromTurn(relation, turn, turnNumber, opener, quote = '') {
     if (!card?.saved || turn.status !== 'done') return;
-    window.getSelection()?.removeAllRanges();
     openExplorerPage(sessionId, {
       key: `${relation}:${card.id}:${turn.id}`,
       relation,
@@ -356,6 +376,7 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
       quote,
       preview: Boolean(quote),
     }, opener);
+    window.getSelection()?.removeAllRanges();
   }
 
   function submit(event) {
@@ -466,14 +487,17 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
     const excerpt = quote || anchorQuestion;
     return h('div', { className: 'dsh-btw-source' },
       h('div', { className: 'dsh-btw-source-head' },
-        h('span', { className: 'dsh-btw-source-label' }, label),
+        h('div', { className: 'dsh-btw-source-origin', title: label },
+          exploreChromeIcon('source'),
+          h('span', { className: 'dsh-btw-source-label' }, label),
+        ),
         parent && (isPage
-          ? exploreButton('返回来源', { onClick: () => onNavigate ? navigateTo(parent.id) : onClosePage() }, 'quiet')
-          : exploreButton('查看来源', { onClick: () => selectCard(parent.id, turnId) }, 'quiet')),
+          ? exploreChromeButton('返回来源', 'return', { onClick: () => onNavigate ? navigateTo(parent.id) : onClosePage() }, 'source-return')
+          : exploreChromeButton('查看来源', 'return', { onClick: () => selectCard(parent.id, turnId) }, 'source-return')),
       ),
       excerpt && h('blockquote', { className: 'dsh-btw-quoted' },
         excerpt.length <= 240 ? excerpt : h('details', null,
-          h('summary', null, `${excerpt.slice(0, 160)}…`),
+          h('summary', null, h('span', { className: 'dsh-btw-quote-preview' }, `${excerpt.slice(0, 160)}…`)),
           h('div', { className: 'dsh-btw-quoted-full' }, excerpt),
         )),
     );
@@ -564,7 +588,8 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
         h('header', { className: 'dsh-btw-head' },
           h('div', { className: 'dsh-btw-head-path' },
             h('nav', { className: 'dsh-btw-crumbs', 'aria-label': '卡片路径' },
-              h('span', null, returnLabel === '返回主聊天' ? '主聊天 / 探索' : '探索'),
+              h('span', { className: 'dsh-btw-crumb-origin' }, exploreChromeIcon('explore'),
+                h('span', null, returnLabel === '返回主聊天' ? '主聊天 / 探索' : '探索')),
               (composer ? exploreTrail(byId.get(composer.parentId), byId) : trail.slice(0, -1)).map((parent) =>
                 h('span', { className: 'dsh-btw-crumb', key: parent.id },
                   h('span', { className: 'dsh-btw-crumb-divider', 'aria-hidden': true }),
@@ -572,16 +597,16 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
                     : exploreButton(exploreTitle(parent), { onClick: () => selectCard(parent.id), title: exploreTitle(parent) }, 'quiet'),
                 )),
             ),
-            isPage ? exploreButton(returnLabel, { onClick: onClosePage, title: 'Esc' }, 'quiet')
-              : onChat && exploreButton('回到主聊天', { onClick: gotoChat }, 'quiet'),
+            isPage ? exploreChromeButton(returnLabel, 'back', { onClick: onClosePage, title: 'Esc' }, 'return')
+              : onChat && exploreChromeButton('回到主聊天', 'back', { onClick: gotoChat }, 'return'),
           ),
           h('div', { className: 'dsh-btw-head-title' },
             h('h2', { id: pageTitleId, title }, title),
-            !composer && card?.saved && exploreButton(card.nativeSessionId ? '移除' : '删除', {
+            !composer && card?.saved && exploreChromeButton(card.nativeSessionId ? '移除' : '删除', 'remove', {
               disabled: blocked || card.status === 'running',
               'aria-label': card.nativeSessionId ? '从树中移除卡片和后代' : '删除卡片和后代',
               onClick: () => setConfirmRemove(card.id),
-            }, 'quiet'),
+            }, 'remove'),
           ),
           !composer && card && h('p', { className: 'dsh-btw-card-meta' },
             [EXPLORE_RELATIONS[card.relation], card.nativeSessionId ? null : `${card.turnCount} 轮问答`,

@@ -13,7 +13,9 @@ DSH 的旁路问答卡片树。在原页面上方打开子卡，沿用 DSH 的�
 - **分支**：继承来源卡的起始上下文，以及从第一轮到指定轮次的问答。后续轮次不会进入分支。
 - **卡内追问**：继续当前卡片的对话，不读取其他分支。
 
-完成的回答有「新建子卡」和「从此轮分支」，会在当前卡上再开一层。圆点和连线直接悬浮在右侧，像大纲一样纵向排列，实心点表示当前卡。点击圆点可以切换同级卡或回到父卡，并播放滑入、淡入动画。父卡的阅读位置和草稿会保留。点「返回上层」或按 `Esc` 可以逐层返回。顶部「探索」可以浏览全部卡片，选中后点「打开对话」回看。
+完成的回答有「新建子卡」和「从此轮分支」，会在当前卡上再开一层。圆点和连线直接悬浮在右侧，像大纲一样纵向排列，实心点表示当前卡，连线标出来源路径。悬停或聚焦圆点可以看标题；用方向键浏览，再按 `Enter` 切换。点击圆点可以切换同级卡或回到父卡，划词开卡、切换与返回都有短程动画。父卡的阅读位置和草稿会保留。点「返回上层」或按 `Esc` 可以逐层返回。顶部「探索」可以浏览全部卡片，选中后点「打开对话」回看。
+
+卡片顶部以轻路径、方向图标和来源摘录帮助定位。系统开启「减少动态效果」时，页面直接切换，保留当前节点和焦点提示。
 
 子卡有自己的对话记录，初始模型和工作区来自主聊天，之后可以独立选择。发过消息的子卡也会出现在 DSH 的「未分组」会话列表。关闭空卡后仍可从树中回来继续。移除卡片会同时移除后代，对话记录仍可从 DSH 会话列表打开。
 
@@ -33,7 +35,7 @@ npm pack
 在需要使用的 profile 安装本地包，随后重启对应 DSH 实例：
 
 ```powershell
-$dshPackage = (Resolve-Path -LiteralPath './dsh-btw-explore-0.3.2.tgz').Path.Replace('\', '/')
+$dshPackage = (Resolve-Path -LiteralPath './dsh-btw-explore-0.3.3.tgz').Path.Replace('\', '/')
 dsh plugin --profile desktop add "file:$dshPackage"
 ```
 
@@ -41,7 +43,7 @@ Web profile 将 `desktop` 改为 `web`。本机桌面版若没有将 `dsh` 加�
 
 ```powershell
 $dshInstall = Read-Host '输入 DeepSeek Harness 安装目录'
-$dshPackage = (Resolve-Path -LiteralPath './dsh-btw-explore-0.3.2.tgz').Path.Replace('\', '/')
+$dshPackage = (Resolve-Path -LiteralPath './dsh-btw-explore-0.3.3.tgz').Path.Replace('\', '/')
 $env:ELECTRON_RUN_AS_NODE = '1'
 try {
   & "$dshInstall/DeepSeek Harness.exe" --expose-internals `
@@ -67,7 +69,7 @@ try {
 ```powershell
 npm test
 node test/host-smoke.mjs
-node test/host-smoke.mjs '--package=./dsh-btw-explore-0.3.2.tgz'
+node test/host-smoke.mjs '--package=./dsh-btw-explore-0.3.3.tgz'
 ```
 
 测试使用临时 DSH profile 和本地模拟模型，详情见[验证记录](docs/verification.md)。

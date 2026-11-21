@@ -1,0 +1,108 @@
+.dsh-btw-map {
+  display: flex;
+  position: absolute;
+  z-index: 2;
+  inset-inline-end: var(--btw-page-edge);
+  inset-block-start: 50%;
+  transform: translateY(-50%);
+  box-sizing: border-box;
+  width: var(--btw-map-max);
+  font: 12px/1.45 var(--dsw-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  color: var(--btw-ink);
+  animation: dsh-btw-map-appear 220ms cubic-bezier(.16, 1, .3, 1);
+}
+.dsh-btw-map-viewport { width: 100%; max-height: min(60dvh, 540px); overflow-x: hidden; overflow-y: auto; scrollbar-width: none; overscroll-behavior: contain; }
+.dsh-btw-map-viewport::-webkit-scrollbar { display: none; }
+.dsh-btw-map-graph { position: relative; flex: none; margin-inline: auto; }
+
+.dsh-btw-map-lines { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+.dsh-btw-map-lines path {
+  fill: none;
+  stroke: color-mix(in srgb, var(--btw-muted) 48%, transparent);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  transition: stroke 180ms ease-out;
+}
+.dsh-btw-map-lines path[data-btw-on-path] { stroke: var(--btw-muted); }
+.dsh-btw-map-current {
+  position: absolute;
+  left: -10px;
+  top: -10px;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--btw-accent);
+  border-radius: 50%;
+  pointer-events: none;
+  transition: transform 220ms cubic-bezier(.16, 1, .3, 1);
+}
+.dsh-btw-map-node {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  transform: translate(-50%, -50%);
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  color: var(--btw-muted);
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+  isolation: isolate;
+  outline: none;
+}
+.dsh-btw-map-node:hover, .dsh-btw-map-node:focus-visible { color: var(--btw-ink); background: transparent; outline: none; }
+.dsh-btw-map-node .dsh-btw-map-halo {
+  box-sizing: border-box;
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--btw-ink) 8%, transparent);
+  opacity: 0;
+  transform: scale(.72);
+  transition: opacity 120ms ease-out, transform 160ms cubic-bezier(.16, 1, .3, 1), border-color 120ms ease-out;
+}
+.dsh-btw-map-node .dsh-btw-map-dot {
+  box-sizing: border-box;
+  width: 8px;
+  height: 8px;
+  border: 1.2px solid currentColor;
+  border-radius: 50%;
+  background: var(--btw-bg);
+  transition: transform 160ms cubic-bezier(.16, 1, .3, 1), background-color 160ms ease-out, border-color 160ms ease-out;
+}
+.dsh-btw-map-node[data-btw-relation="home"] .dsh-btw-map-dot { width: 6px; height: 6px; }
+.dsh-btw-map-node[data-btw-on-path] .dsh-btw-map-dot { border-color: var(--btw-ink); }
+.dsh-btw-map-node[aria-current="page"] .dsh-btw-map-dot { background: var(--btw-accent); border-color: var(--btw-accent); outline: 0; }
+.dsh-btw-map-node:hover .dsh-btw-map-halo, .dsh-btw-map-node:focus-visible .dsh-btw-map-halo { opacity: 1; transform: scale(1); }
+.dsh-btw-map-node:focus-visible .dsh-btw-map-halo { border-color: var(--btw-accent); }
+.dsh-btw-map-node:hover .dsh-btw-map-dot { transform: scale(1.25); }
+.dsh-btw-map-node:active .dsh-btw-map-dot { transform: scale(.8); }
+.dsh-btw-map-hint {
+  position: absolute;
+  inset-inline-end: calc(100% + 8px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: min(260px, calc(100vw - 90px));
+  padding: 7px 10px;
+  border: 1px solid var(--btw-line);
+  border-radius: 8px;
+  background: var(--btw-raised);
+  box-shadow: 0 3px 14px rgb(14 15 21 / 12%);
+  pointer-events: none;
+  transform: translateY(-50%);
+  animation: dsh-btw-map-hint-in 140ms cubic-bezier(.16, 1, .3, 1);
+}
+.dsh-btw-map-hint-kind { flex-shrink: 0; font-size: 10px; color: var(--btw-muted); }
+.dsh-btw-map-hint-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+@keyframes dsh-btw-map-appear { from { opacity: 0; } }
+@keyframes dsh-btw-map-hint-in { from { opacity: 0; transform: translate(4px, -50%); } }
+@media (prefers-reduced-motion: reduce) {
+  .dsh-btw-map, .dsh-btw-map-hint { animation: none; }
+  .dsh-btw-map-current, .dsh-btw-map-node .dsh-btw-map-dot, .dsh-btw-map-node .dsh-btw-map-halo { transition: none; }
+}
