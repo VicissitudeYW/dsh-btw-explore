@@ -1,0 +1,54 @@
+{
+  "name": "dsh-btw-explore",
+  "version": "0.3.0",
+  "description": "Persistent side-question card trees for DeepSeek Harness",
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "src",
+    "scripts/build-client.mjs",
+    "cordis.patch.yml",
+    "docs/*.md",
+    "docs/showcase/card-tree.png",
+    "docs/showcase/child-page.jpg",
+    "docs/showcase/native-card-map.jpg",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=24",
+    "dsh": ">=0.2.2-rc.5 <0.3.0-0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-chat",
+        "@deepseek-ai/dsh-client-ui-renderer"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build-client.mjs",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "prepack": "npm run build"
+  },
+  "devDependencies": {
+    "jsdom": "^31.0.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  }
+}
