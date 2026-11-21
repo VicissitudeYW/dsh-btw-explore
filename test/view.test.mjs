@@ -9,8 +9,6 @@ const dom = new JSDOM('<div id="root"></div>', { url: 'https://test.invalid/' })
 globalThis.window = dom.window;
 globalThis.document = dom.window.document;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-dom.window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
-dom.window.HTMLDialogElement.prototype.close = function () { this.open = false; };
 Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
 const { createRoot } = await import('react-dom/client');
 const read = (file) => fs.readFileSync(new URL(`../src/${file}.js`, import.meta.url), 'utf8');
@@ -90,7 +88,7 @@ async function mount(t, { entry = null, initialCards = [], intercept = async () 
       h(ExplorePages, { sessionId, request }),
     ));
   }
-  function layers() { return [...container.querySelectorAll('dialog[open]')]; }
+  function layers() { return [...container.querySelectorAll('.dsh-btw-page')]; }
   function surface() { return layers().at(-1) ?? container; }
   function button(label, scope = surface()) {
     return [...scope.querySelectorAll('button')].find((element) =>
@@ -173,25 +171,33 @@ test('预览失败保留草稿并复用请求 ID，保存后续问并从首轮�
   assert.equal(view.source(), undefined, 'dismissing a page does not navigate to the chat tab');
 });
 
-test('右侧节点可在同级卡之间切换，回到父卡会还原草稿和阅读位置', async (t) => {
+test('独立的圆点导航保持焦点，切换同级卡后回到父卡会还原草稿和阅读位置', async (t) => {
   const parent = makeCard();
   const child = makeCard(randomUUID(), { title: '第一个子卡', parentId: parent.id, relation: 'child' });
   const sibling = makeCard(randomUUID(), { title: '同级分支', parentId: parent.id, relation: 'branch' });
   const view = await mount(t, { initialCards: [parent, child, sibling], entry: { source: { turn: 7 } } });
-  const node = (title) => view.surface().querySelector(`[aria-label="卡片节点 · ${title}"]`);
+  const navigation = view.container.querySelector('nav[aria-label="探索卡片关系导航"]');
+  assert.ok(navigation);
+  assert.ok(!navigation.closest('.dsh-btw-page'), '导航应在子卡外面');
+  assert.ok(navigation.closest('[role="dialog"][aria-modal="true"]'), '屏幕阅读器应能在覆盖层中访问导航');
+  const node = (title) => navigation.querySelector(`[aria-label="卡片节点 · ${title}"]`);
   const choose = async (title) => {
     const button = node(title);
     assert.ok(button, `找得到节点 ${title}`);
+    button.focus();
     await act(async () => button.click());
+    assert.equal(document.activeElement, button);
+    assert.equal(button.getAttribute('aria-current'), 'page');
+    assert.equal(view.surface().querySelector('h2').textContent, title);
   };
   await choose(parent.title);
+  const parentPage = view.surface();
   await view.fill('父卡还没有发送的草稿');
   view.surface().querySelector('.dsh-btw-scroller').scrollTop = 61;
   await choose(child.title);
   assert.equal(view.layers()[0].hasAttribute('inert'), true);
   assert.equal(view.surface().hasAttribute('inert'), false);
-  assert.equal(node(child.title).getAttribute('aria-current'), 'page');
-  const map = view.surface().querySelector('.dsh-btw-map-viewport');
+  const map = navigation.querySelector('.dsh-btw-map-viewport');
   map.scrollLeft = 44;
   await view.refresh();
   assert.equal(map.scrollLeft, 44, 'a refresh must not snap the graph away from the nodes being browsed');
@@ -199,8 +205,13 @@ test('右侧节点可在同级卡之间切换，回到父卡会还原草稿和�
   window.dispatchEvent(new window.Event('resize'));
   assert.equal(map.scrollLeft, 0, 'the selected column comes back into view when the window changes size');
   await choose(sibling.title);
-  assert.equal(node(sibling.title).getAttribute('aria-current'), 'page');
+  await act(async () => {
+    node(child.title).click();
+    node(sibling.title).click();
+  });
+  assert.equal(view.surface().querySelector('h2').textContent, sibling.title, '连续切换以最后点击为准');
   await choose(parent.title);
+  assert.equal(view.surface(), parentPage, '导航应复用已挂载的父卡');
   assert.equal(view.surface().hasAttribute('inert'), false);
   assert.equal(view.surface().querySelector('textarea').value, '父卡还没有发送的草稿');
   assert.equal(view.surface().querySelector('.dsh-btw-scroller').scrollTop, 61);

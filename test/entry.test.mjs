@@ -9,11 +9,10 @@ globalThis.window = dom.window;
 globalThis.document = dom.window.document;
 globalThis.MutationObserver = dom.window.MutationObserver;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-dom.window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
-dom.window.HTMLDialogElement.prototype.close = function () { this.open = false; };
 const { createRoot } = await import('react-dom/client');
 const read = (file) => fs.readFileSync(new URL(`../src/${file}.js`, import.meta.url), 'utf8');
-const source = [read('view'), 'ExploreView = mockExploreView;', read('pages'), read('native'), read('entry')].join('\n');
+const source = [read('view'), 'ExploreView = mockExploreView;', read('pages'), read('navigation'), read('native'), read('entry')].join('\n');
+const overlay = () => document.querySelector('[role="dialog"][aria-modal="true"]');
 
 async function setup(t) {
   document.body.innerHTML = '<header id="header"><div id="entry"></div><div data-conversation-tabs><button role="tab">对话</button><button role="tab">探索</button></div></header><div id="detail"></div>';
@@ -59,7 +58,7 @@ test('header selects the tree; assistant entry opens a child page without switch
   const app = await setup(t);
   await act(async () => document.querySelector('#entry button').click());
   assert.equal(app.navigations(), 1);
-  assert.equal(document.querySelector('dialog[open]'), null);
+  assert.equal(overlay(), null);
   const assistant = app.slots.get('conversation.chat.assistant-actions');
   const container = document.createElement('div');
   document.body.append(container);
@@ -69,10 +68,10 @@ test('header selects the tree; assistant entry opens a child page without switch
   const opener = container.querySelector('button');
   await act(async () => opener.click());
   assert.equal(app.navigations(), 1, 'message action leaves the current view active');
-  assert.ok(document.querySelector('dialog[open]'));
+  assert.ok(overlay());
   assert.equal(app.draft().source.messageId, 'message-1');
-  await act(async () => document.querySelector('dialog button').click());
-  assert.equal(document.querySelector('dialog[open]'), null);
+  await act(async () => overlay().querySelector('button').click());
+  assert.equal(overlay(), null);
   assert.equal(document.activeElement, opener);
 });
 
@@ -119,14 +118,14 @@ test('selection action coexists with an earlier native quote handler and preserv
   assert.equal(surface.querySelector('button').textContent, '引用文本');
   await act(async () => action.click());
   assert.equal(app.navigations(), 0);
-  const dialog = document.querySelector('dialog[open]');
+  const dialog = overlay();
   assert.ok(dialog);
   assert.equal(app.draft().quote, '讨论事务边界');
   assert.equal(app.draft().source.turn, 3);
   assert.equal(app.draft().source.role, 'assistant');
   assert.equal(document.getSelection().isCollapsed, true);
-  await act(async () => dialog.dispatchEvent(new window.Event('cancel', { cancelable: true })));
-  assert.equal(document.querySelector('dialog[open]'), null);
+  await act(async () => dialog.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
+  assert.equal(overlay(), null);
   const message = region.querySelector('[data-chat-turn]');
   assert.ok(document.activeElement === message);
   assert.equal(message.getAttribute('tabindex'), '-1', 'the message stays focusable until focus leaves');

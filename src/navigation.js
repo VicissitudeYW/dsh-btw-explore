@@ -1,10 +1,10 @@
 const EXPLORE_NODE_STEP = 36;
 
 function exploreNodeLayout(cards) {
-  const ids = new Set(cards.map((card) => card.id));
+  const byId = new Map(cards.map((card) => [card.id, card]));
   const children = new Map();
   for (const card of cards) {
-    const parent = ids.has(card.parentId) ? card.parentId : null;
+    const parent = byId.has(card.parentId) ? card.parentId : null;
     if (!children.has(parent)) children.set(parent, []);
     children.get(parent).push(card);
   }
@@ -25,11 +25,11 @@ function exploreNodeLayout(cards) {
     node.y = (depth + 0.5) * EXPLORE_NODE_STEP;
   }
   place(null, 0, null);
-  return { nodes, width: lane * EXPLORE_NODE_STEP, height: height * EXPLORE_NODE_STEP };
+  return { nodes, byId, width: lane * EXPLORE_NODE_STEP, height: height * EXPLORE_NODE_STEP };
 }
 
 function ExploreNavigation({ cards, activeId, onNavigate, returnLabel }) {
-  const { nodes, width, height } = React.useMemo(() => exploreNodeLayout(cards), [cards]);
+  const { nodes, byId, width, height } = React.useMemo(() => exploreNodeLayout(cards), [cards]);
   const viewport = React.useRef(null);
   const currentNode = nodes.find(({ card }) => (card?.id ?? null) === activeId);
   const { x: activeX, y: activeY } = currentNode ?? {};
@@ -65,7 +65,10 @@ function ExploreNavigation({ cards, activeId, onNavigate, returnLabel }) {
             style: { left: node.x, top: node.y }, title: name, 'aria-label': `卡片节点 · ${name}`,
             'aria-current': node === currentNode ? 'page' : undefined,
             'data-btw-relation': node.card?.relation ?? 'home',
-            onClick: () => onNavigate(node.card?.id ?? null),
+            onClick: (event) => {
+              event.currentTarget.focus({ preventScroll: true });
+              onNavigate(exploreTrail(node.card, byId));
+            },
           }, h('span', { 'aria-hidden': true }));
         }),
       ),

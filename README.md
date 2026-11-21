@@ -2,7 +2,7 @@
 
 DSH 的旁路问答卡片树。新卡在来源聊天上方打开，使用 DSH 的原生对话和输入框。可以从回答中划选内容建立子卡，也可以从指定轮次另开分支。卡片和对话保存在本机，重启 DSH 后可从「探索」回看。
 
-![DSH 的原生子卡和右侧节点图](docs/showcase/native-card-map.jpg)
+![DSH 的原生子卡和独立悬浮的圆点导航](docs/showcase/native-card-map.jpg)
 
 ## 使用
 
@@ -13,7 +13,7 @@ DSH 的旁路问答卡片树。新卡在来源聊天上方打开，使用 DSH �
 - **分支**：继承来源卡的起始上下文，以及从第一轮到指定轮次的问答。后续轮次不会进入分支。
 - **卡内追问**：继续当前卡片的对话，不读取其他分支。
 
-完成的回答有「新建子卡」和「从此轮分支」，会在当前卡上再开一层。右侧节点图用连线标出来源，实心点表示当前卡，点其他圆点即可切换。点「返回上层」或按 `Esc` 逐层返回，父卡的阅读位置和草稿会保留。窄窗下子页占满视口，节点图仍可在右侧滚动。顶部「探索」可以浏览全部卡片，选中后点「打开原生对话」回看。
+完成的回答有「新建子卡」和「从此轮分支」，会在当前卡上再开一层。圆点导航独立悬浮在卡片右侧，连线标出来源，实心点表示当前卡。点击圆点可以切换同级卡或回到父卡，卡片会轻微滑入并淡入。父卡的阅读位置和草稿会保留，窄窗下导航也可以单独滚动。点「返回上层」或按 `Esc` 可以逐层返回。顶部「探索」可以浏览全部卡片，选中后点「打开原生对话」回看。
 
 子卡使用独立的普通 DSH 会话，首选模型和工作区来自主会话，后续可以在子卡内独立选择。发过消息的子卡也会出现在 DSH 的「未分组」会话列表。打开新卡时就会在树中保存节点，关闭空卡后仍可回来继续。移除卡片会同时移除后代，已发送的原生聊天仍可从 DSH 会话列表打开。
 
@@ -33,7 +33,7 @@ npm pack
 在需要使用的 profile 安装本地包，随后重启对应 DSH 实例：
 
 ```powershell
-$dshPackage = (Resolve-Path -LiteralPath './dsh-btw-explore-0.3.0.tgz').Path.Replace('\', '/')
+$dshPackage = (Resolve-Path -LiteralPath './dsh-btw-explore-0.3.1.tgz').Path.Replace('\', '/')
 dsh plugin --profile desktop add "file:$dshPackage"
 ```
 
@@ -41,7 +41,7 @@ Web profile 将 `desktop` 改为 `web`。插件发布包没有运行时 npm 依�
 
 ```powershell
 $dshInstall = Read-Host '输入 DeepSeek Harness 安装目录'
-$dshPackage = (Resolve-Path -LiteralPath './dsh-btw-explore-0.3.0.tgz').Path.Replace('\', '/')
+$dshPackage = (Resolve-Path -LiteralPath './dsh-btw-explore-0.3.1.tgz').Path.Replace('\', '/')
 $env:ELECTRON_RUN_AS_NODE = '1'
 try {
   & "$dshInstall/DeepSeek Harness.exe" --expose-internals `
@@ -60,18 +60,16 @@ try {
 
 旧卡的问答同样保存在 SQLite。旧问答支持流式生成和重试，强制退出后未完成轮次最多约 20 秒后显示「中断」。
 
-## 范围
+## 致谢
 
-从卡片树跳转到主聊天原文依赖宿主当前能渲染的消息范围。来源轮次不可用时，界面会提示重新选择来源。Explore 的总结卡、自由画布和云同步尚未实现。
-
-本插件是基于公开产品行为和宿主 API 独立实现的作品，未使用 Explore 的私有后端或源码。详细对照见 [调研说明](docs/research.md) 与 [设计记录](docs/design.md)。
+卡片交互与圆点导航受 [Explore](https://ai.explore.poker/) 启发，感谢 Explore 团队。
 
 ## 开发验证
 
 ```powershell
 npm test
 node test/host-smoke.mjs
-node test/host-smoke.mjs '--package=./dsh-btw-explore-0.3.0.tgz'
+node test/host-smoke.mjs '--package=./dsh-btw-explore-0.3.1.tgz'
 ```
 
 单测覆盖来源边界、分支上下文、跨会话隔离、取消和重试、SQLite 恢复和 React 交互。烟测使用独立临时 DSH home 和本地测试模型服务，检查宿主认证、流式问答及进程重启恢复。测试日志在命令打印的临时目录，验收详情见[验证记录](docs/verification.md)。

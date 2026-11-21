@@ -46,12 +46,12 @@ function exploreButton(label, props = {}, tone = '') {
 
 function isCoveredExploreReader(element) {
   const page = element.closest('.dsh-btw-page');
-  return page ? !page.hasAttribute('data-btw-top') : Boolean(document.querySelector('.dsh-btw-page[open]'));
+  return page ? !page.hasAttribute('data-btw-top') : Boolean(document.querySelector('.dsh-btw-overlay'));
 }
 
 // The client build supplies the renderer's React instance, including the Markdown renderer.
-function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard, onNavigate, onChat, onClosePage,
-  pageTitleId, returnLabel, homeLabel, request, Markdown, renderNative, nativeCards = Boolean(renderNative) }) {
+function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard, onReadCards, onNavigate, onChat, onClosePage,
+  pageTitleId, returnLabel, request, Markdown, renderNative, nativeCards = Boolean(renderNative) }) {
   const { useEffect, useLayoutEffect, useMemo, useRef, useState } = React;
   const isPage = Boolean(onClosePage);
   const preferences = useMemo(() => isPage ? null : explorePreferences(sessionId), [sessionId, isPage]);
@@ -198,6 +198,7 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
         const data = await request(sessionId, { cardId: selectedId ?? undefined, signal: controller.signal });
         if (outdated()) return;
         setReading({ data, revision: reload, cardId: selectedId });
+        onReadCards?.(data.cards);
         setReadError('');
         if (!isPage && !data.card && data.cards.length) {
           const mostRecent = data.cards.reduce((a, b) => a.updatedAt >= b.updatedAt ? a : b);
@@ -223,7 +224,7 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
       controller.abort();
       clearTimeout(timer);
     };
-  }, [sessionId, selectedId, reload, request, isPage]);
+  }, [sessionId, selectedId, reload, request, isPage, onReadCards]);
 
   useEffect(() => {
     if (composer?.key) inputRef.current?.focus({ preventScroll: true });
@@ -542,9 +543,8 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
     });
   }
 
-  const layoutClass = `dsh-btw-layout${isPage && cards.length ? ' dsh-btw-layout-with-map' : ''}`;
   return h('div', { className: isPage ? 'dsh-btw-explore dsh-btw-explore-page' : 'dsh-btw-explore' },
-    h('div', { className: layoutClass },
+    h('div', { className: 'dsh-btw-layout' },
       !isPage && h('aside', { className: `dsh-btw-sidebar${mobileTreeOpen ? ' is-mobile-open' : ''}` },
         h('div', { className: 'dsh-btw-side-head' },
           h('h2', { className: 'dsh-btw-side-title' }, '卡片树'),
@@ -673,8 +673,6 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
           ),
         ),
       ),
-      isPage && onNavigate && h(ExploreNavigation, { cards, activeId: composer ? null : selectedId,
-        returnLabel: homeLabel, onNavigate: navigateTo }),
     ),
   );
 }
