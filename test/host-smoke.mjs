@@ -1,12 +1,13 @@
 /**
  * Actual DSH web-host smoke test, isolated from every real profile and provider.
  *
- * node test/host-smoke.mjs [--serve] [--fixture-only] [--package=path-to-tgz] [--toolbar]
+ * node test/host-smoke.mjs [--serve] [--fixture-only] [--package=path-to-tgz] [--toolbar] [--toolbar-package=path-to-tgz]
  * DSH_DESKTOP_ROOT may point at a different installed Desktop directory.
  * DSH_TOOLBAR_ROOT may point at a complete dsh-message-toolbar checkout.
  * Every run creates its own temporary home, workspace, logs and provider.
- * --serve leaves only this test's services running for a browser check; Ctrl+C
- * stops them. The browser must use the printed authenticated test URL.
+ * --serve leaves only this test's services running for a browser check; Enter
+ * exits through cleanup, and Ctrl+C also stops them. The browser must use the
+ * printed authenticated test URL.
  * This verifies native host mounting, APIs and persistence. UI verification
  * is a separate browser check.
  */
@@ -33,7 +34,8 @@ for (const dir of [home, workspace, agents]) fs.mkdirSync(dir, { recursive: true
 const args = new Set(process.argv.slice(2));
 const serve = args.has('--serve');
 const fixtureOnly = args.has('--fixture-only');
-const withToolbar = args.has('--toolbar');
+const toolbarArchive = [...args].find((arg) => arg.startsWith('--toolbar-package='))?.slice('--toolbar-package='.length);
+const withToolbar = args.has('--toolbar') || Boolean(toolbarArchive);
 const archive = [...args].find((arg) => arg.startsWith('--package='))?.slice('--package='.length);
 const requests = [];
 const mainQuestion = '天空为什么是蓝色的？';
@@ -143,6 +145,10 @@ async function startProvider() {
     } catch (error) {
       if (!res.headersSent) res.writeHead(500, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error: { message: error.message } }));
+    } finally {
+      // Keep GUI requests on disk while --serve is running, even if a terminal
+      // termination later prevents the process cleanup handler from completing.
+      fs.writeFileSync(path.join(temp, 'provider-requests.json'), `${JSON.stringify(requests, null, 2)}\n`);
     }
   });
   provider.listen(0, '127.0.0.1');
@@ -189,7 +195,12 @@ async function prepareProfile(baseURL) {
     fs.mkdirSync(path.join(profile, 'node_modules'), { recursive: true });
     fs.symlinkSync(project, path.join(profile, 'node_modules', 'dsh-btw-explore'), process.platform === 'win32' ? 'junction' : 'dir');
   }
-  if (withToolbar) {
+  if (toolbarArchive) {
+    const packagePath = path.resolve(toolbarArchive);
+    assert.ok(fs.statSync(packagePath).isFile(), `Toolbar package is not a file: ${packagePath}`);
+    await childCommand(['plugin', '--profile', 'btw-smoke', 'add', `file:${packagePath.replaceAll('\\', '/')}`, '--offline'], 'toolbar-package-install.log');
+    pass('DSH plugin command installed the toolbar release archive in the isolated profile', path.basename(packagePath));
+  } else if (withToolbar) {
     const toolbarRoot = path.resolve(process.env.DSH_TOOLBAR_ROOT ?? path.join(project, '../dsh-message-toolbar'));
     assert.ok(fs.existsSync(path.join(toolbarRoot, 'cordis.patch.yml')), `Message toolbar bundle missing: ${toolbarRoot}`);
     const manifestPath = path.join(profile, 'package.json');
@@ -449,6 +460,39 @@ try {
     assert.ok(!childInput.includes(question), 'A native child only sees its anchor, not the inherited prefix');
     assert.ok(JSON.stringify(childSnapshot).includes(showcaseAnswers.get(childQuestion).split('\n')[0]));
     pass('native card can spawn a quoted child with only the anchor context');
+    let selectedVersion;
+    if (withToolbar) {
+      const editedCardId = `card-${randomUUID()}`;
+      const editable = await json('/api/dsh-btw-explore', { action: 'open-native', sessionId, cardId: editedCardId,
+        relation: 'root', source: { turn: 1, role: 'assistant' }, quote: '蓝光的波长较短' });
+      await nativePrompt(editable.nativeSessionId, '编辑联动验证：解释蓝光的散射。');
+      const marker = 'HOST_EDIT_034：编辑后的回答已经保存。';
+      const edited = await json('/message-toolbar', { action: 'context-branch', sessionId: editable.nativeSessionId,
+        turn: 1, operation: 'edit-answer', text: marker });
+      const rebound = await json('/api/dsh-btw-explore', { action: 'select-native-version', sessionId, cardId: editedCardId,
+        fromSessionId: editable.nativeSessionId, toSessionId: edited.sessionId });
+      assert.equal(rebound.nativeSessionId, edited.sessionId);
+      await json('/message-toolbar', { action: 'focus', sessionId: edited.sessionId, token: edited.navigationToken });
+      const { call: editedFollow } = await nativePrompt(edited.sessionId, '编辑后的补充记录是什么？');
+      assert.ok(JSON.stringify(editedFollow.messages).includes(marker), 'Follow-up must use the saved answer');
+      assert.ok(JSON.stringify(editedFollow.messages).includes('蓝光的波长较短'), 'Edited version must retain the original source snapshot');
+      pass('toolbar edit binds the same native card and its real follow-up includes both the edit and source');
+
+      const retryQuestion = '重新生成验证：继续解释短波长的散射。';
+      const retryStart = requests.length;
+      const retried = await json('/message-toolbar', { action: 'context-branch', sessionId: edited.sessionId,
+        turn: 2, operation: 'retry', text: retryQuestion });
+      const retryCall = await poll(async () => requests.slice(retryStart).find((entry) => entry.completed
+        && entry.messages?.some((part) => String(part.content).includes(retryQuestion))), Boolean, 'native toolbar regeneration');
+      assert.ok(JSON.stringify(retryCall.messages).includes('蓝光的波长较短'), 'A regeneration must receive its source before the client rebinds');
+      await json('/api/dsh-btw-explore', { action: 'select-native-version', sessionId, cardId: editedCardId,
+        fromSessionId: edited.sessionId, toSessionId: retried.sessionId });
+      await json('/message-toolbar', { action: 'focus', sessionId: retried.sessionId, token: retried.navigationToken });
+      pass('toolbar regeneration first request keeps the source before navigation completes');
+      selectedVersion = { cardId: editedCardId, originalSessionId: editable.nativeSessionId,
+        editedSessionId: edited.sessionId, nativeSessionId: retried.sessionId, marker };
+      evidence.nativeVersion = selectedVersion;
+    }
     const after = await rpc('session/events', { address, maxMessages: 100 });
     assert.deepEqual(after, before, 'Independent side questions must not append any main-session events');
     pass('main session event snapshot unchanged after exploration, follow-up and branch');
@@ -464,14 +508,25 @@ try {
     pass('native card binding and host transcript survive restart');
     assert.deepEqual(await rpc('session/events', { address, maxMessages: 100 }), before);
     pass('main native history unchanged after restart');
+    if (selectedVersion) {
+      const restoredVersion = await json(`/api/dsh-btw-explore?sessionId=${sessionId}&cardId=${selectedVersion.cardId}`);
+      assert.equal(restoredVersion.card.nativeSessionId, selectedVersion.nativeSessionId);
+      const { call } = await nativePrompt(selectedVersion.nativeSessionId, '重启后再继续解释这段引用。');
+      assert.ok(JSON.stringify(call.messages).includes('蓝光的波长较短'));
+      assert.ok(JSON.stringify(call.messages).includes(selectedVersion.marker));
+      assert.deepEqual(await rpc('session/events', { address, maxMessages: 100 }), before);
+      pass('selected native version and its source context survive host restart without changing main history');
+    }
     evidence.cardId = cardId;
     if (serve) {
       console.log(`Browser verification URL: ${authenticatedUrl}`);
       console.log(`Main native session: ${sessionId}`);
       console.log(`Saved side card: ${cardId}`);
-      console.log('Only isolated test services remain running. Ctrl+C stops them.');
+      console.log('Only isolated test services remain running. Press Enter to finish verification and clean up; Ctrl+C also stops them.');
       fs.writeFileSync(path.join(temp, 'evidence.json'), `${JSON.stringify(evidence, null, 2)}\n`);
-      await new Promise(() => {});
+      process.stdin.resume();
+      await once(process.stdin, 'data');
+      process.stdin.pause();
     }
   }
 } catch (error) {

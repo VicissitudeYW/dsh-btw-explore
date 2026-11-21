@@ -6,7 +6,9 @@ DSH 的旁路问答卡片树。在原页面上方打开子卡，沿用 DSH 的�
 
 ## 用法
 
-在聊天回答下方点「探索」，或划词后点「探索引用」，就能打开一张卡。可以发送和追问、切换模型、添加附件或调用指令。对话区插件也能使用，已验证 `dsh-message-toolbar` 的回答编辑；依赖主窗口专属区域的插件需要单独适配。
+在聊天回答下方点「探索」，或划词后点「探索引用」，就能打开一张卡。可以发送和追问、切换模型、添加附件或调用指令。对话区插件也能使用；依赖主窗口专属区域的插件需要单独适配。
+
+配合 **`dsh-message-toolbar` 1.11.1 或更新版本**，可以在原生子卡里保存回答编辑、切换回答版本和重新生成，整个过程留在同一张卡中。关闭后重开会恢复选中的版本，后续追问使用当前版本的对话和原始引用。使用这些功能时，请同时更新两个插件；工具栏 1.11.0 的保存操作会跳转主窗口。
 
 - **根卡片**：从当前主聊天的最近完整文本轮次开始；从某条回答进入时，固定到那条消息。
 - **子卡**：围绕所选轮次的问题和回答展开。划选了回答中的一段时，只带入该段回答。
@@ -35,7 +37,7 @@ npm pack
 在需要使用的 profile 安装本地包，随后重启对应 DSH 实例：
 
 ```powershell
-$dshPackage = (Resolve-Path -LiteralPath './dsh-btw-explore-0.3.3.tgz').Path.Replace('\', '/')
+$dshPackage = (Resolve-Path -LiteralPath './dsh-btw-explore-0.3.4.tgz').Path.Replace('\', '/')
 dsh plugin --profile desktop add "file:$dshPackage"
 ```
 
@@ -43,7 +45,7 @@ Web profile 将 `desktop` 改为 `web`。本机桌面版若没有将 `dsh` 加�
 
 ```powershell
 $dshInstall = Read-Host '输入 DeepSeek Harness 安装目录'
-$dshPackage = (Resolve-Path -LiteralPath './dsh-btw-explore-0.3.3.tgz').Path.Replace('\', '/')
+$dshPackage = (Resolve-Path -LiteralPath './dsh-btw-explore-0.3.4.tgz').Path.Replace('\', '/')
 $env:ELECTRON_RUN_AS_NODE = '1'
 try {
   & "$dshInstall/DeepSeek Harness.exe" --expose-internals `
@@ -69,7 +71,7 @@ try {
 ```powershell
 npm test
 node test/host-smoke.mjs
-node test/host-smoke.mjs '--package=./dsh-btw-explore-0.3.3.tgz'
+node test/host-smoke.mjs '--package=./dsh-btw-explore-0.3.4.tgz'
 ```
 
 测试使用临时 DSH profile 和本地模拟模型，详情见[验证记录](docs/verification.md)。

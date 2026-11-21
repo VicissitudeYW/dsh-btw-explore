@@ -13,12 +13,38 @@ Object.defineProperty(document, 'visibilityState', { configurable: true, value: 
 const { createRoot } = await import('react-dom/client');
 const { createPortal } = await import('react-dom');
 const read = (file) => fs.readFileSync(new URL(`../src/${file}.js`, import.meta.url), 'utf8');
-const { ExploreView, ExplorePages, openExplorerPage, openSavedExplorerPage } = Function('React', 'h', `
+const loadComponents = Function('React', 'h', 'setTimeout', 'clearTimeout', `
   ${read('view')}
   ${read('navigation')}
   ${read('pages')}
   return { ExploreView, ExplorePages, openExplorerPage, openSavedExplorerPage };
-`)(React, React.createElement);
+`);
+
+function motionClock() {
+  let now = 0;
+  let sequence = 0;
+  const timers = new Map();
+  return {
+    setTimeout(callback, delay) {
+      const id = ++sequence;
+      timers.set(id, { callback, at: now + delay });
+      return id;
+    },
+    clearTimeout(id) { timers.delete(id); },
+    advance(milliseconds) {
+      const until = now + milliseconds;
+      for (;;) {
+        const due = [...timers].filter(([, timer]) => timer.at <= until).sort((a, b) => a[1].at - b[1].at)[0];
+        if (!due) break;
+        const [id, timer] = due;
+        now = timer.at;
+        timers.delete(id);
+        timer.callback();
+      }
+      now = until;
+    },
+  };
+}
 
 function card(id, title, parentId = null) {
   return { id, title, parentId, relation: parentId ? 'child' : 'root', saved: true, status: 'done',
@@ -26,9 +52,13 @@ function card(id, title, parentId = null) {
     turns: [{ id: `${id}-turn`, question: title, answer: `${title}的回答`, status: 'done' }] };
 }
 
-// JSDOM does not render WAAPI. This double controls only that missing browser
-// boundary; page mounting, navigation, drafts, focus and effects are real React.
-async function mount(t, { reduced = false, support = true, native = false, initialRead, nativeOpen, nativeDetails, inertAwareFocus = false } = {}) {
+// JSDOM does not render WAAPI. Control its promises and the component-local
+// fallback clock together; React, JSDOM and global timers keep their real clocks.
+async function mount(t, { reduced = false, support = true, native = false, initialRead, nativeOpen, nativeDetails,
+  inertAwareFocus = false, clock = motionClock() } = {}) {
+  const { ExploreView, ExplorePages, openExplorerPage, openSavedExplorerPage } = loadComponents(
+    React, React.createElement, clock.setTimeout, clock.clearTimeout,
+  );
   document.body.innerHTML = '<main id="owner"><div data-conversation-scroll><article data-chat-flow-kind="assistant"><p id="quote">引用来源的完整正文</p><button id="opener">探索引用</button></article></div><div id="root"></div></main>';
   window.localStorage.clear();
   const root = createRoot(document.querySelector('#root'));
@@ -123,6 +153,7 @@ async function mount(t, { reduced = false, support = true, native = false, initi
     button.click();
   });
   return { source, owner, animations, nativeMounts, requests, refusedFocus, top, overlay, settle, navigate, close, unmount, listeners,
+    advance: (milliseconds) => act(async () => clock.advance(milliseconds)),
     open: (id = 'parent') => act(async () => openSavedExplorerPage(sessionId, id, source)),
     draft: (opener) => act(async () => openExplorerPage(sessionId, {
       key: 'child-draft', relation: 'child', parentId: 'parent', anchorTurnId: 'parent-turn', quote: '选中的来源', preview: true,
@@ -207,6 +238,56 @@ test('退出完成前保留真实页面和主界面inert，结束后还原来源
   assert.equal(app.owner.hasAttribute('inert'), false);
   assert.equal(document.activeElement, app.source);
   assert.equal(scroller.scrollTop, 91);
+});
+
+test('WAAPI始终未完成时计时回退仍会收束进入与退出并还原焦点', async (t) => {
+  const app = await mount(t);
+  await app.open();
+  const page = app.top();
+  await app.advance(289);
+  assert.equal(page.dataset.btwMotion, 'enter');
+  await app.advance(1);
+  assert.equal(page.hasAttribute('data-btw-motion'), false);
+  assert.equal(page.isConnected, true);
+  await app.close();
+  await app.advance(259);
+  assert.equal(page.isConnected, true);
+  assert.equal(app.owner.hasAttribute('inert'), true);
+  await app.advance(1);
+  assert.equal(app.overlay(), null);
+  assert.equal(app.owner.hasAttribute('inert'), false);
+  assert.equal(document.activeElement, app.source);
+});
+
+test('切换后的旧回退期限不会提前收束最新目标', async (t) => {
+  const app = await mount(t);
+  await app.open('first');
+  await app.settle();
+  await app.navigate('第二个子卡');
+  await app.advance(200);
+  const outgoing = app.top();
+  await app.navigate('第三个子卡');
+  const current = app.top();
+  await app.advance(60);
+  assert.equal(app.top(), current);
+  assert.equal(current.dataset.btwMotion, 'switch-next');
+  assert.equal(outgoing.isConnected, true);
+  await app.advance(199);
+  assert.equal(current.dataset.btwMotion, 'switch-next');
+  await app.advance(1);
+  assert.equal(app.top(), current);
+  assert.equal(current.hasAttribute('data-btw-motion'), false);
+  assert.equal(outgoing.isConnected, false);
+});
+
+test('真实计时回退在WAAPI从不完成时仍会释放退出层', async (t) => {
+  const app = await mount(t, { clock: { setTimeout, clearTimeout } });
+  await app.open();
+  await app.close();
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 320)); });
+  assert.equal(app.overlay(), null);
+  assert.equal(app.owner.hasAttribute('inert'), false);
+  assert.equal(document.activeElement, app.source);
 });
 
 test('连续切换与迟到的动画完成不会覆盖最后目标', async (t) => {
