@@ -310,7 +310,7 @@ test('选区建子卡保留原文、父卡和指定轮次，默认先预览', as
   sourcePage.scrollTop = 160;
   await view.fill('留在父卡的草稿');
   const { quote } = await selectAnswer(view.container);
-  await view.click('探索引用');
+  await view.click('探索');
   assert.equal(view.layers().length, 1);
   assert.match(view.text(), new RegExp(quote));
   await view.fill('详细解释这句话');
@@ -356,7 +356,7 @@ test('父卡被盖住时仍然接收新回答，返回后保持来源处的滚�
   scroller.scrollTop = 160;
   await act(async () => scroller.dispatchEvent(new window.Event('scroll')));
   await selectAnswer(view.surface());
-  await view.click('探索引用');
+  await view.click('探索');
   height = 880;
   view.cards.get(card.id).turns[1].answer = '继续生成中：越来越长的回答';
   await view.refresh();
@@ -377,7 +377,7 @@ test('创建子卡后父卡重新读取期间也能返回到划词的回答', as
     },
   });
   const { answer } = await selectAnswer(view.surface());
-  await view.click('探索引用');
+  await view.click('探索');
   await view.fill('父卡在子卡提交后重新读取');
   readingParent = true;
   await view.click('生成预览');

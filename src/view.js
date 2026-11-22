@@ -39,6 +39,13 @@ function exploreRootDraft(entry) {
   return { key: 'root', relation: 'root', source: entry?.source, quote, preview: Boolean(quote) };
 }
 
+function exploreSelectionActions(includeBranch, includeExplain = true) {
+  const actions = [['child', '探索']];
+  if (includeExplain) actions.unshift(['explain', '解释']);
+  if (includeBranch) actions.push(['branch', '从此轮分支']);
+  return actions;
+}
+
 function exploreButton(label, props = {}, tone = '') {
   return h('button', { type: 'button', className: `dsh-btw-button${tone ? ` dsh-btw-${tone}` : ''}`, ...props }, label);
 }
@@ -369,11 +376,12 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
     const id = nativeDraftId.current ??= crypto.randomUUID();
     const body = draft ? { cardId: id, relation: draft.relation, source: draft.source,
       quote: draft.quote, parentId: draft.parentId, anchorTurnId: draft.anchorTurnId } : { cardId: selectedId };
-    void mutate('open-native', body, (result) => selectCard(result.cardId));
+    void mutate(draft?.explain ? 'explain-native' : 'open-native', body, (result) => selectCard(result.cardId));
   }
 
-  function startFromTurn(relation, turn, turnNumber, opener, quote = '') {
+  function startFromTurn(action, turn, turnNumber, opener, quote) {
     if (!card?.saved || turn.status !== 'done') return;
+    const relation = action === 'branch' ? 'branch' : 'child';
     openExplorerPage(sessionId, {
       key: `${relation}:${card.id}:${turn.id}`,
       relation,
@@ -382,6 +390,7 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
       anchorQuestion: turn.question,
       turnNumber,
       quote,
+      explain: action === 'explain',
       preview: relation === 'child' && Boolean(quote),
     }, opener);
     window.getSelection()?.removeAllRanges();
@@ -523,14 +532,14 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
           : h('div', { className: 'dsh-btw-plain-answer' }, turn.answer),
         selected && h('div', { className: 'dsh-btw-answer-selection', 'aria-label': '选区操作', role: 'group',
           style: { '--btw-selection-x': `${selected.x}px`, top: selected.y } },
-          [['child', '探索引用'], ['branch', '从此轮分支']].map(([relation, label]) => h('button', {
-            key: relation, type: 'button', className: 'dsh-btw-selection-button', disabled: Boolean(pending), 'aria-haspopup': 'dialog',
+          exploreSelectionActions(true, nativeCards).map(([action, label]) => h('button', {
+            key: action, type: 'button', className: 'dsh-btw-selection-button', disabled: Boolean(pending), 'aria-haspopup': 'dialog',
             onPointerDown: (event) => event.preventDefault(),
             onClick: (event) => {
               const answer = event.currentTarget.closest('[data-btw-answer]');
               const range = window.getSelection();
               if (answer?.contains(range?.anchorNode) && answer.contains(range?.focusNode) && range.toString().trim().slice(0, EXPLORE_QUOTE_LIMIT) === selected.quote) {
-                startFromTurn(relation, turn, index + 1, answer, selected.quote);
+                startFromTurn(action, turn, index + 1, answer, selected.quote);
               }
               setQuoteSelection(null);
             },

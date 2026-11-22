@@ -128,7 +128,7 @@ test('selection action coexists with an earlier native quote handler and preserv
   document.getSelection().addRange(range);
   await act(async () => document.dispatchEvent(new window.Event('selectionchange')));
   const surface = region.querySelector('[data-text-interaction-surface]');
-  const action = [...surface.querySelectorAll('button')].find(button => button.textContent === '探索引用');
+  const action = [...surface.querySelectorAll('button')].find(button => button.textContent === '探索');
   assert.ok(action, 'explore remains available when quote claimed the keyed surface');
   assert.equal(surface.querySelector('button').textContent, '引用文本');
   await act(async () => action.click());
@@ -138,6 +138,7 @@ test('selection action coexists with an earlier native quote handler and preserv
   assert.equal(app.draft().quote, '讨论事务边界');
   assert.equal(app.draft().source.turn, 3);
   assert.equal(app.draft().source.role, 'assistant');
+  assert.equal(Boolean(app.draft().explain), false);
   assert.equal(document.getSelection().isCollapsed, true);
   await act(async () => dialog.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
   assert.equal(overlay(), null);
@@ -146,6 +147,19 @@ test('selection action coexists with an earlier native quote handler and preserv
   assert.equal(message.getAttribute('tabindex'), '-1', 'the message stays focusable until focus leaves');
   document.querySelector('[role="tab"]').focus();
   assert.equal(message.hasAttribute('tabindex'), false);
+
+  await act(async () => {
+    document.getSelection().removeAllRanges();
+    document.getSelection().addRange(range);
+    document.dispatchEvent(new window.Event('selectionchange'));
+  });
+  const explain = [...surface.querySelectorAll('button')].find(button => button.textContent === '解释');
+  assert.ok(explain);
+  await act(async () => explain.click());
+  assert.ok(overlay());
+  assert.equal(app.draft().quote, '讨论事务边界');
+  assert.equal(app.draft().source.turn, 3);
+  assert.equal(app.draft().explain, true);
 });
 
 test('selection supplementation ignores other sessions and never duplicates a native exploration action', async (t) => {
@@ -160,7 +174,7 @@ test('selection supplementation ignores other sessions and never duplicates a na
   await act(async () => document.dispatchEvent(new window.Event('selectionchange')));
   assert.equal(region.querySelectorAll('button').length, 1);
   region.dataset.conversationSession = 'session-1';
-  region.querySelector('button').textContent = '探索引用';
+  region.querySelector('button').textContent = '探索';
   region.querySelector('button').dataset.dshBtwSelection = 'native';
   await act(async () => document.dispatchEvent(new window.Event('selectionchange')));
   assert.equal(region.querySelectorAll('button').length, 1);
@@ -194,7 +208,7 @@ test('划词菜单只从单条消息打开原生卡；子卡可用同一段文�
   await select(paragraphs[1]);
   assert.equal(surface.querySelectorAll('button').length, 1, '跨消息选区不挂探索操作');
   await select(paragraphs[0]);
-  assert.deepEqual([...surface.querySelectorAll('button')].map((button) => button.textContent), ['引用文本', '探索引用', '从此轮分支']);
+  assert.deepEqual([...surface.querySelectorAll('button')].map((button) => button.textContent), ['引用文本', '解释', '探索', '从此轮分支']);
   await act(async () => [...surface.querySelectorAll('button')].at(-1).click());
   assert.equal(app.navigations(), 0);
   assert.equal(app.draft().relation, 'branch');

@@ -45,18 +45,18 @@ function chatSelection() {
   return { source: { role: row.dataset.chatFlowKind === 'user' ? 'user' : 'assistant', turn: Number(turn) }, row, region, native, quote };
 }
 
-function openChatSelection({ source, row, region, native, quote }, relation) {
+function openChatSelection({ source, row, region, native, quote }, action) {
+  const relation = action === 'branch' ? 'branch' : 'child';
+  const explain = action === 'explain';
   if (native) {
     const parentId = native.dataset.btwNativeCard;
     openExplorerPage(native.dataset.btwRootSession, {
-      key: `${relation}:${parentId}:${source.turn}`, relation, parentId, source, quote,
+      key: `${relation}:${parentId}:${source.turn}`, relation, parentId, source, quote, explain,
     }, row);
   } else {
-    openExplorerPage(region.dataset.conversationSession, exploreRootDraft({ source, quote }), row, 'chat');
+    openExplorerPage(region.dataset.conversationSession, { ...exploreRootDraft({ source, quote }), explain }, row, 'chat');
   }
 }
-
-const selectionActions = (native) => native ? [['child', '探索引用'], ['branch', '从此轮分支']] : [['child', '探索引用']];
 
 let NativeMarkdown;
 let explorerPortal;
@@ -132,7 +132,7 @@ function supplementSelection(sessionId) {
     added = document.createElement('span');
     added.className = 'dsh-btw-selection-actions';
     added.dataset.dshBtwSelection = 'supplement';
-    for (const [relation, label] of selectionActions(native)) {
+    for (const [action, label] of exploreSelectionActions(Boolean(native))) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'dsh-btw-selection-button';
@@ -142,7 +142,7 @@ function supplementSelection(sessionId) {
       button.addEventListener('click', () => {
         const current = chatSelection();
         if (current?.region === region && current.native === native) {
-          openChatSelection(current, relation);
+          openChatSelection(current, action);
           document.getSelection()?.removeAllRanges();
         }
         remove();
@@ -187,11 +187,11 @@ function AskSelection({ sessionId, useSession, readText, dismiss, clearSelection
   const selected = chatSelection();
   if (!selected || selected.region.dataset.conversationSession !== resolvedSessionId || !readText?.()?.trim()) return null;
   return h('span', { className: 'dsh-btw-selection-actions', 'data-dsh-btw-selection': 'native' },
-    selectionActions(selected.native).map(([relation, label]) => h('button', { key: relation, type: 'button',
+    exploreSelectionActions(Boolean(selected.native)).map(([action, label]) => h('button', { key: action, type: 'button',
       className: 'dsh-btw-selection-button', 'aria-haspopup': 'dialog', onPointerDown: (event) => event.preventDefault(), onClick: () => {
         const current = chatSelection();
         if (current?.region === selected.region && current.native === selected.native) {
-          openChatSelection(current, relation);
+          openChatSelection(current, action);
           clearSelection?.();
         }
         dismiss?.();

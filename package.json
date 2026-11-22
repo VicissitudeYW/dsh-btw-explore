@@ -1,6 +1,6 @@
 {
   "name": "dsh-btw-explore",
-  "version": "0.3.13",
+  "version": "0.3.14",
   "description": "Persistent side-question card trees for DeepSeek Harness",
   "license": "MIT",
   "type": "module",

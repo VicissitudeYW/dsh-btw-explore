@@ -136,7 +136,7 @@ function deferred() {
   return { promise, resolve };
 }
 
-function nativeHarness(t, { beforeCreate = async () => {}, resolveAgent, clock } = {}) {
+function nativeHarness(t, { beforeCreate = async () => {}, resolveAgent, prompt, clock } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'dsh-explore-native-'));
   const database = join(directory, 'test.sqlite');
   const events = [{ type: 'turn/start', seq: 0, data: { turn: 1 } },
@@ -150,7 +150,7 @@ function nativeHarness(t, { beforeCreate = async () => {}, resolveAgent, clock }
   const ctx = {
     sessions, agents,
     sessionQuery: { async observeSession() { throw new Error('missing'); } },
-    sessionController: { ...(resolveAgent ? { resolveAgent: (id) => resolveAgent(id, { sessions, agents }) } : {}), async create(options) {
+    sessionController: { prompt, ...(resolveAgent ? { resolveAgent: (id) => resolveAgent(id, { sessions, agents }) } : {}), async create(options) {
       creates.push(options);
       await beforeCreate(options, creates.length);
       if (!agents.has(options.sessionId)) {
@@ -173,6 +173,60 @@ function nativeHarness(t, { beforeCreate = async () => {}, resolveAgent, clock }
   });
   return { app: open(), open, database, sessions, agents, creates };
 }
+
+test('explaining an empty quote card submits one native first turn, even across concurrent opens', async (t) => {
+  const entered = deferred();
+  const finish = deferred();
+  const submissions = [];
+  const { app, sessions, creates } = nativeHarness(t, { async prompt(input) {
+    submissions.push(input);
+    entered.resolve();
+    await finish.promise;
+    sessions.get(input.sessionId).snapshotEvents = () => [{ type: 'turn/start' }];
+    return { accepted: true };
+  } });
+  const quote = { relation: 'root', source: { turn: 1, role: 'user' }, quote: 'source question' };
+  const card = await request(app, 'open-native', { ...quote, cardId: 'manual-quote' });
+  assert.equal(submissions.length, 0);
+  const result = request(app, 'explain-native', { ...quote, cardId: 'explain-quote' });
+  // Surface a missing action without waiting indefinitely for the prompt fixture.
+  await Promise.race([result, entered.promise]);
+  const concurrent = request(app, 'explain-native', { ...quote, cardId: 'explain-quote-again' });
+  await new Promise(setImmediate);
+  finish.resolve();
+  assert.deepEqual(await Promise.all([result, concurrent]), [card, card]);
+  assert.deepEqual(await request(app, 'explain-native', { ...quote, cardId: 'reopen-explained' }), card);
+  assert.equal(creates.length, 1);
+  assert.equal(submissions.length, 1);
+  assert.equal(submissions[0].sessionId, card.nativeSessionId);
+  assert.equal(submissions[0].mode, 'queue');
+  assert.match(submissions[0].content[0].text, /解释.*选中的内容/);
+  assert.match(app.nativeContext(card.nativeSessionId), /source question/);
+});
+
+test('explain opens a quote card with an existing user turn without adding a prompt', async (t) => {
+  const { app, sessions } = nativeHarness(t, { prompt() { assert.fail('must not send to a nonempty conversation'); } });
+  const quote = { relation: 'root', source: { turn: 1, role: 'user' }, quote: 'source question' };
+  const card = await request(app, 'open-native', { ...quote, cardId: 'answered-quote' });
+  sessions.get(card.nativeSessionId).snapshotEvents = () => [{ type: 'user/message', data: { source: { kind: 'user' } } }];
+  assert.deepEqual(await request(app, 'explain-native', { ...quote, cardId: 'reopen-answered' }), card);
+});
+
+test('failed explanation admission can retry the same native card and prompt identity', async (t) => {
+  const submissions = [];
+  const { app, creates } = nativeHarness(t, { async prompt(input) {
+    submissions.push(input);
+    if (submissions.length === 1) throw new Error('fixture rejection');
+    return { accepted: true };
+  } });
+  const quote = { cardId: 'retry-explanation', source: { turn: 1, role: 'user' }, quote: 'source question' };
+  await assert.rejects(request(app, 'explain-native', quote), (error) => error.status === 503);
+  const card = await request(app, 'explain-native', quote);
+  assert.equal(creates.length, 1);
+  assert.equal(submissions.length, 2);
+  assert.deepEqual(submissions[0], submissions[1]);
+  assert.equal(submissions[1].sessionId, card.nativeSessionId);
+});
 
 test('native preparation blocks removal from another explorer until a durable open is acknowledged', async (t) => {
   const entered = deferred();

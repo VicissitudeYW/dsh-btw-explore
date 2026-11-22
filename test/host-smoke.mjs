@@ -44,6 +44,8 @@ const followQuestion = '那紫光为什么没有让天空变成紫色？';
 const branchQuestion = '夕阳为什么常常是红色的？';
 const firstNativeQuestion = '日落时的光经过了更厚的大气吗？';
 const childQuestion = '“瑞利散射”是什么意思？';
+const explanationQuestion = '请结合原对话，用两三句话解释我选中的内容。只解释文字，不调用工具。';
+const explanationAnswer = '这段话是说蓝光的波长比红光短，因此它更容易被空气分子散射。';
 const quote = '瑞利散射';
 const showcaseAnswers = new Map([
   [mainQuestion, '太阳光看起来是白色的，其实包含多种颜色。光进入大气后，空气分子会把它散射到各个方向。\n\n蓝光的波长较短，比红光更容易被散射。因此，白天从天空各处进入眼睛的光里，蓝光更突出，我们便看到了蓝天。'],
@@ -52,6 +54,7 @@ const showcaseAnswers = new Map([
   [branchQuestion, '日落时，太阳光斜穿大气，走过的路程比正午更长。短波长的蓝光在途中被散射得更多，抵达眼睛的直射光便以红、橙等颜色为主。\n\n空气中的尘埃和小水滴也会影响晚霞的颜色。'],
   [firstNativeQuestion, '是的，更准确地说，是光在大气中走过的路程更长。\n\n正午时，阳光近乎竖直穿过大气；日落时，阳光沿较倾斜的方向进入。瑞利散射使蓝光在这段更长的路途中更容易离开原来的方向，剩下的直射光就偏红了。'],
   [childQuestion, '瑞利散射是光被远小于自身波长的微小粒子散射的现象，空气中的氮气和氧气分子就是例子。\n\n它对短波长的光更强：波长减半时，散射强度约变成原来的 16 倍。这能帮助解释白天的蓝天和日落时偏红的太阳。'],
+  [explanationQuestion, explanationAnswer],
 ]);
 let host;
 let provider;
@@ -451,6 +454,23 @@ try {
     assert.ok(JSON.stringify(nativeSnapshot).includes(showcaseAnswers.get(firstNativeQuestion).split('\n')[0]));
     pass('native composer RPC uses only the designated source prefix and opens without generating');
 
+    const explainQuote = '蓝光的波长较短';
+    const explainSpec = { sessionId, source: { turn: 1, role: 'assistant' }, quote: explainQuote };
+    const explanation = await json('/api/dsh-btw-explore', { ...explainSpec, action: 'explain-native', cardId: randomUUID() });
+    const explanationAddress = { kind: 'session', sessionId: explanation.nativeSessionId };
+    const explainCall = await poll(async () => requests.find((entry) => entry.completed
+      && entry.messages?.some((part) => part.role === 'user' && part.content === explanationQuestion)), Boolean, 'automatic explanation provider call');
+    assert.ok(JSON.stringify(explainCall.messages).includes(explainQuote));
+    const explanationSnapshot = await poll(() => rpc('session/events', { address: explanationAddress, maxMessages: 100 }),
+      (value) => JSON.stringify(value).includes(explanationAnswer) && JSON.stringify(value).includes('turn/end'), 'automatic native explanation');
+    for (const action of ['open-native', 'explain-native']) {
+      assert.deepEqual(await json('/api/dsh-btw-explore', { ...explainSpec, action, cardId: randomUUID() }), explanation);
+    }
+    const explanationQuery = `/api/dsh-btw-explore?sessionId=${sessionId}&cardId=${explanation.cardId}`;
+    assert.equal((await json(explanationQuery)).card.title, explainQuote);
+    assert.deepEqual(await rpc('session/events', { address: explanationAddress, maxMessages: 100 }), explanationSnapshot);
+    pass('Explain sends a real first native turn with the quote; Explore and Explain reuse the same card');
+
     const childId = `card-${randomUUID()}`;
     const child = await json('/api/dsh-btw-explore', { action: 'open-native', sessionId, cardId: childId,
       relation: 'child', parentId: nativeCardId, source: { turn: 1, role: 'assistant' }, quote });
@@ -506,6 +526,9 @@ try {
     assert.equal(nativeRestored.card.nativeSessionId, nativeCard.nativeSessionId);
     assert.deepEqual(await rpc('session/events', { address: nativeAddress, maxMessages: 100 }), nativeSnapshot);
     pass('native card binding and host transcript survive restart');
+    assert.deepEqual(await json('/api/dsh-btw-explore', { ...explainSpec, action: 'explain-native', cardId: randomUUID() }), explanation);
+    assert.deepEqual(await rpc('session/events', { address: explanationAddress, maxMessages: 100 }), explanationSnapshot);
+    pass('reopening an explained quote after restart does not send again');
     assert.deepEqual(await rpc('session/events', { address, maxMessages: 100 }), before);
     pass('main native history unchanged after restart');
     if (selectedVersion) {
