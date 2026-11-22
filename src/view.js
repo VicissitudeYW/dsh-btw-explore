@@ -50,10 +50,9 @@ function exploreChromeIcon(name) {
     source: ['M9 5H4v5h5V5Zm0 5c0 4-1 6-4 8', 'M20 5h-5v5h5V5Zm0 5c0 4-1 6-4 8'],
     return: ['m9 5-5 5 5 5', 'M4 10h10a5 5 0 0 1 5 5v4'],
     remove: ['M4 7h16', 'M9 7V4h6v3', 'm6 7 1 13h10l1-13', 'M10 11v5', 'M14 11v5'],
-    grip: ['M9 5v.01M9 12v.01M9 19v.01M15 5v.01M15 12v.01M15 19v.01'],
   };
   return h('svg', { className: 'dsh-btw-chrome-icon', key: 'icon', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
-    strokeWidth: name === 'grip' ? 2.6 : 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true, focusable: false,
+    strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true, focusable: false,
   }, (paths[name] ?? paths.back).map((d, index) => h('path', { d, key: index })));
 }
 
@@ -611,8 +610,6 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
       h('section', { className: 'dsh-btw-main', 'aria-label': '探索对话' },
         h('header', { className: 'dsh-btw-head' },
           h('div', { className: 'dsh-btw-head-path' },
-            isPage && h('span', { className: 'dsh-btw-grip', 'data-btw-drag-handle': '', role: 'img',
-              'aria-label': '拖动卡片', title: '拖动卡片' }, exploreChromeIcon('grip')),
             h('nav', { className: 'dsh-btw-crumbs', 'aria-label': '卡片路径' },
               h('span', { className: 'dsh-btw-crumb-origin' }, exploreChromeIcon('explore'),
                 h('span', null, returnLabel === '返回主聊天' ? '主聊天 / 探索' : '探索')),

@@ -47,7 +47,7 @@ test('原生卡的外层控件保留返回、来源跳转和明确的移除确�
 
   assert.equal(document.querySelector('h1#card-heading').textContent, `${quote.slice(0, 40)}…`);
   assert.ok(document.querySelector('[data-native-content]'));
-  assert.ok(document.querySelector('[data-btw-drag-handle]'));
+  assert.ok(!document.querySelector('[aria-label="拖动卡片"]'));
   assert.doesNotMatch(document.body.textContent, /根卡|子卡|分支/);
   assert.equal(button('返回上层').getAttribute('title'), 'Esc');
   assert.ok(document.querySelector('nav[aria-label="卡片路径"]').textContent.includes(parent.title));

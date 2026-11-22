@@ -63,8 +63,7 @@ function exploreEdge(node) {
     const fromY = source.y + radius;
     const toY = node.y - 12;
     const middle = (fromY + toY) / 2;
-    return { x1: source.x, y1: fromY, x2: node.x, y2: toY,
-      d: `M ${source.x} ${fromY} C ${source.x} ${middle} ${node.x} ${middle} ${node.x} ${toY}` };
+    return `M ${source.x} ${fromY} C ${source.x} ${middle} ${node.x} ${middle} ${node.x} ${toY}`;
   }
   const direction = Math.sign(node.x - source.x);
   const fromX = source.x + direction * radius;
@@ -75,18 +74,17 @@ function exploreEdge(node) {
     const toY = node.y - 12;
     const lane = source.y - 28;
     const shoulder = direction * 24;
-    return { x1: source.x, y1: fromY, x2: node.x, y2: toY,
-      d: `M ${source.x} ${fromY} C ${source.x} ${lane} ${source.x + shoulder / 2} ${lane} ${source.x + shoulder} ${lane}`
-        + ` C ${source.x + shoulder} ${lane} ${node.x - shoulder} ${lane} ${node.x - shoulder} ${lane}`
-        + ` C ${node.x - shoulder / 2} ${lane} ${node.x} ${lane} ${node.x} ${toY}` };
+    return `M ${source.x} ${fromY} C ${source.x} ${lane} ${source.x + shoulder / 2} ${lane} ${source.x + shoulder} ${lane}`
+      + ` C ${source.x + shoulder} ${lane} ${node.x - shoulder} ${lane} ${node.x - shoulder} ${lane}`
+      + ` C ${node.x - shoulder / 2} ${lane} ${node.x} ${lane} ${node.x} ${toY}`;
   }
-  return { x1: fromX, y1: source.y, x2: toX, y2: node.y,
-    d: `M ${fromX} ${source.y} C ${fromX + direction * 6} ${source.y} ${toX - direction * 6} ${node.y} ${toX} ${node.y}` };
+  return `M ${fromX} ${source.y} C ${fromX + direction * 6} ${source.y} ${toX - direction * 6} ${node.y} ${toX} ${node.y}`;
 }
 
 function ExploreNavigation({ graph, activeId, onNavigate, returnLabel }) {
   const { nodes, byId, width, height, fitWidth } = graph;
   const hasCards = nodes.length > 1;
+  const map = React.useRef(null);
   const viewport = React.useRef(null);
   const stage = React.useRef(null);
   const buttons = React.useRef(new Map());
@@ -103,6 +101,29 @@ function ExploreNavigation({ graph, activeId, onNavigate, returnLabel }) {
   const keyFor = (node) => node.card?.id ?? 'home';
   const currentNode = activeId === null ? nodes[0] : nodes.find((node) => node.card && node.card.id === activeId);
   const rovingKey = nodes.some((node) => keyFor(node) === tabKey) ? tabKey : keyFor(currentNode ?? nodes[0]);
+
+  React.useEffect(() => {
+    const element = map.current;
+    if (!element) return;
+    const reach = 24;
+    // Observe proximity without enlarging the map's hit area over the backdrop.
+    function update(event) {
+      const { left, top, right, bottom } = element.getBoundingClientRect();
+      element.toggleAttribute('data-btw-near', event.pointerType === 'mouse'
+        && event.clientX >= left - reach && event.clientX <= right + reach
+        && event.clientY >= top - reach && event.clientY <= bottom + reach);
+    }
+    const clear = () => element.removeAttribute('data-btw-near');
+    window.addEventListener('pointermove', update, { passive: true });
+    document.documentElement.addEventListener('pointerleave', clear);
+    window.addEventListener('blur', clear);
+    return () => {
+      window.removeEventListener('pointermove', update);
+      document.documentElement.removeEventListener('pointerleave', clear);
+      window.removeEventListener('blur', clear);
+      clear();
+    };
+  }, [hasCards]);
 
   function readScroll() {
     const area = viewport.current;
@@ -238,7 +259,7 @@ function ExploreNavigation({ graph, activeId, onNavigate, returnLabel }) {
   if (!hasCards) return null;
   const activePath = new Set();
   for (let node = currentNode; node && !activePath.has(node); node = node.parent) activePath.add(node);
-  const edges = nodes.filter((node) => node.parent).map((node, index) => ({ node, ...exploreEdge(node), id: `${hintId}-edge-${index}` }));
+  const connected = nodes.filter((node) => node.parent);
   const hintNode = nodes.find((node) => keyFor(node) === (hovered ?? focused));
   const hintX = hintNode ? hintNode.x + view.padX - view.left : 0;
   const hintY = hintNode ? hintNode.y + view.padY - view.top : 0;
@@ -270,7 +291,7 @@ function ExploreNavigation({ graph, activeId, onNavigate, returnLabel }) {
     bringIntoView(target);
   }
 
-  return h('nav', { className: 'dsh-btw-map', 'aria-label': '探索卡片关系导航',
+  return h('nav', { ref: map, className: 'dsh-btw-map', 'aria-label': '探索卡片关系导航',
     style: { '--btw-map-content-height': `${height + 48}px` } },
     h('div', { className: 'dsh-btw-map-viewport', ref: viewport, 'data-btw-dragging': dragging || undefined,
       onScroll: readScroll,
@@ -304,14 +325,8 @@ function ExploreNavigation({ graph, activeId, onNavigate, returnLabel }) {
       h('div', { className: 'dsh-btw-map-stage', ref: stage, style: { width } },
         h('div', { className: 'dsh-btw-map-graph', style: { width, height } },
           h('svg', { className: 'dsh-btw-map-lines', width, height, viewBox: `0 0 ${width} ${height}`, 'aria-hidden': true },
-            h('defs', null, edges.map((edge) => h('linearGradient', { key: edge.id, id: edge.id,
-              gradientUnits: 'userSpaceOnUse', x1: edge.x1, y1: edge.y1, x2: edge.x2, y2: edge.y2,
-              style: { color: activePath.has(edge.node) ? 'var(--btw-ink)' : 'var(--btw-muted)' } },
-              h('stop', { offset: '0%', stopColor: 'currentColor', stopOpacity: activePath.has(edge.node) ? 1 : .8 }),
-              h('stop', { offset: '100%', stopColor: 'currentColor', stopOpacity: activePath.has(edge.node) ? .35 : .18 }),
-            ))),
-            edges.map((edge) => h('path', { key: edge.node.card.id, d: edge.d, style: { stroke: `url(#${edge.id})` },
-              'data-btw-node-key': keyFor(edge.node), 'data-btw-on-path': activePath.has(edge.node) || undefined })),
+            connected.map((node) => h('path', { key: node.card.id, d: exploreEdge(node),
+              'data-btw-node-key': keyFor(node), 'data-btw-on-path': activePath.has(node) || undefined })),
           ),
           currentNode && h('span', { className: 'dsh-btw-map-current', 'aria-hidden': true,
             style: { transform: `translate(${currentNode.x}px, ${currentNode.y}px)` } }),

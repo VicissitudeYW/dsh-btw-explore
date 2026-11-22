@@ -14,24 +14,6 @@
   gap: 2px;
 }
 
-.dsh-btw-grip {
-  display: grid;
-  place-items: center;
-  flex: 0 0 28px;
-  height: 32px;
-  margin-inline-start: -6px;
-  border-radius: 6px;
-  color: var(--btw-muted);
-  cursor: grab;
-  user-select: none;
-  touch-action: none;
-}
-
-.dsh-btw-grip:hover {
-  color: var(--btw-ink);
-  background: var(--btw-hover);
-}
-
 .dsh-btw-crumbs {
   gap: 8px;
   line-height: 1.4;

@@ -241,6 +241,27 @@ test('concurrent explorers retry one new native card without a unique error or d
   }
 });
 
+test('reselecting the same anchored quote reopens its card across requests and plugin instances', async (t) => {
+  const { app, open, creates } = nativeHarness(t);
+  const selection = { relation: 'root', source: { turn: 1, role: 'user' }, quote: 'source' };
+  const [first, concurrent] = await Promise.all([
+    request(app, 'open-native', { ...selection, cardId: 'first-quote' }),
+    request(app, 'open-native', { ...selection, cardId: 'concurrent-quote' }),
+  ]);
+  assert.deepEqual(concurrent, first);
+
+  const other = open();
+  assert.deepEqual(await request(other, 'open-native', { ...selection, quote: ' source ', cardId: 'after-reopen' }), first);
+  assert.equal(creates.length, 1);
+  assert.deepEqual(other.read('session-a').cards.map((item) => item.id), [first.cardId]);
+
+  const distinct = await request(other, 'open-native', { ...selection, source: { messageId: 'u1', role: 'user' }, cardId: 'different-anchor' });
+  assert.notEqual(distinct.cardId, first.cardId);
+  await request(other, 'remove', { cardId: first.cardId });
+  const replacement = await request(other, 'open-native', { ...selection, cardId: 'new-after-removal' });
+  assert.notEqual(replacement.nativeSessionId, first.nativeSessionId);
+});
+
 test('native card retries cannot silently replace a concurrent request with a different source', async (t) => {
   const entered = deferred();
   const finish = deferred();
