@@ -206,7 +206,7 @@ function ExplorePages({ sessionId, request, Markdown, renderNative, portal, owne
 
   const opened = pages.length > 0;
   const visible = opened || leaving.length > 0;
-  useExplorerDeckDrag(overlay, visible);
+  useExplorerDeckLayout(overlay, ownerRef, visible);
   React.useLayoutEffect(() => {
     if (!visible || !portal) return;
     let owner = ownerRef.current;
@@ -280,9 +280,13 @@ function ExplorePages({ sessionId, request, Markdown, renderNative, portal, owne
     };
   }, [deck.revision, motion]);
 
-  function dismiss(key) {
-    setDeck((previous) => previous.pages.at(-1)?.key !== key ? previous
-      : transitionExplorerPages(previous, previous.pages.slice(0, -1), previous.pages.length > 1 ? 'back' : 'exit', previous.pages.at(-1), committedPages.current));
+  function dismiss(key, all = false) {
+    setDeck((previous) => {
+      if (previous.pages.at(-1)?.key !== key) return previous;
+      const next = all ? [] : previous.pages.slice(0, -1);
+      return transitionExplorerPages(previous, next, next.length ? 'back' : 'exit',
+        all ? previous.pages[0] : previous.pages.at(-1), committedPages.current);
+    });
   }
 
   React.useEffect(() => {
@@ -333,6 +337,8 @@ function ExplorePages({ sessionId, request, Markdown, renderNative, portal, owne
     'data-btw-has-map': cards.length ? '' : undefined,
     style: cards.length ? { '--btw-map-content-width': `${graph.fitWidth}px` } : undefined,
   },
+    h('div', { className: 'dsh-btw-backdrop', 'aria-hidden': true,
+      onClick: opened ? () => dismiss(top.key, true) : undefined }),
     [...leaving, ...pages].map((page) => {
       const isLeaving = leaving.includes(page);
       const animated = isLeaving ? motion?.kind === 'exit' : page.key === motion?.incomingKey;

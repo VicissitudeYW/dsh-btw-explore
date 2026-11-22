@@ -170,9 +170,12 @@ button.dsh-btw-selection-button:focus-visible {
 .dsh-btw-overlay {
   --btw-page-inset: clamp(14px, 5dvh, 44px);
   --btw-page-edge: clamp(10px, 2vw, 28px);
+  --btw-chat-left: 0px;
+  --btw-chat-right: 0px;
+  --btw-chat-width: calc(100% - var(--btw-chat-left) - var(--btw-chat-right));
   --btw-map-base: 144px;
-  --btw-map-limit: 32dvw;
-  --btw-map-width: clamp(var(--btw-map-base), var(--btw-map-content-width, 0px), var(--btw-map-limit));
+  --btw-map-limit: min(32dvw, max(64px, calc(var(--btw-chat-width) - 2 * var(--btw-page-edge) - var(--btw-map-gap) - 280px)));
+  --btw-map-width: clamp(min(var(--btw-map-base), var(--btw-map-limit)), var(--btw-map-content-width, 0px), var(--btw-map-limit));
   --btw-map-gap: 18px;
   --btw-map-reserve: 0px;
   position: fixed;
@@ -181,16 +184,17 @@ button.dsh-btw-selection-button:focus-visible {
   background: rgb(14 15 21 / 34%);
 }
 .dsh-btw-overlay[data-btw-has-map] { --btw-map-reserve: calc(var(--btw-map-width) + var(--btw-map-gap)); }
+.dsh-btw-backdrop { position: absolute; inset: 0; }
 
 .dsh-btw-page {
   position: absolute;
   top: var(--btw-drag-y, 0px);
   bottom: calc(-1 * var(--btw-drag-y, 0px));
-  left: calc(var(--btw-page-edge) + var(--btw-map-reserve) + var(--btw-drag-x, 0px));
-  right: calc(var(--btw-page-edge) - var(--btw-drag-x, 0px));
+  left: calc(var(--btw-chat-left) + var(--btw-page-edge) + var(--btw-map-reserve) + var(--btw-drag-x, 0px));
+  right: calc(var(--btw-chat-right) + var(--btw-page-edge) - var(--btw-drag-x, 0px));
   margin: auto;
   box-sizing: border-box;
-  width: min(840px, calc(100% - 2 * var(--btw-page-edge) - var(--btw-map-reserve)));
+  width: min(840px, calc(var(--btw-chat-width) - 2 * var(--btw-page-edge) - var(--btw-map-reserve)));
   height: min(860px, calc(100dvh - 2 * var(--btw-page-inset)));
   outline: none;
   overflow: hidden;
@@ -199,9 +203,11 @@ button.dsh-btw-selection-button:focus-visible {
   border-radius: 14px;
   box-shadow: 0 16px 56px rgb(14 15 21 / 26%);
 }
-.dsh-btw-page [data-btw-drag-handle] { cursor: grab; touch-action: none; user-select: none; }
+.dsh-btw-page[data-btw-top] { cursor: grab; }
+.dsh-btw-page :is([data-chat-flow-kind], [data-btw-turn], [data-composer-seat], [data-composer-card]) { cursor: auto; }
+.dsh-btw-page .dsh-btw-head-path { touch-action: none; }
 .dsh-btw-overlay[data-btw-dragging],
-.dsh-btw-overlay[data-btw-dragging] [data-btw-drag-handle] { cursor: grabbing; }
+.dsh-btw-overlay[data-btw-dragging] .dsh-btw-page[data-btw-top] { cursor: grabbing; }
 .dsh-btw-explore-page { min-height: 0; }
 .dsh-btw-explore-page .dsh-btw-layout { grid-template-columns: minmax(0, 1fr); }
 .dsh-btw-explore-page .dsh-btw-crumb > span:last-child { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
@@ -221,7 +227,6 @@ button.dsh-btw-selection-button:focus-visible {
   .dsh-btw-overlay {
     --btw-page-edge: 6px;
     --btw-map-base: 72px;
-    --btw-map-limit: min(32dvw, calc(100dvw - 2 * var(--btw-page-edge) - var(--btw-map-gap) - 280px));
     --btw-map-gap: 8px;
   }
   .dsh-btw-page { border-radius: 10px; }

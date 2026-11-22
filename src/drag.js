@@ -1,5 +1,8 @@
 function installExplorerDeckDrag(overlay) {
   const foreground = '.dsh-btw-page[data-btw-top]';
+  const interactive = '[data-chat-flow-kind], [data-btw-turn], [data-composer-seat], [data-composer-card], '
+    + 'a, button, input, select, textarea, label, details, [contenteditable], [draggable="true"], '
+    + '[role="button"], [role="checkbox"], [role="menu"], [role="listbox"], [role="slider"], [role="tab"]';
   const padding = 8;
   let x = 0;
   let y = 0;
@@ -34,10 +37,10 @@ function installExplorerDeckDrag(overlay) {
   }
 
   function begin(event) {
-    if (gesture || event.button !== 0 || event.isPrimary === false) return;
-    const handle = event.target.closest?.('[data-btw-drag-handle]');
-    const frame = handle?.closest(foreground);
-    if (!frame || frame.hasAttribute('data-btw-motion')) return;
+    if (gesture || event.defaultPrevented || event.button !== 0 || event.isPrimary === false) return;
+    const target = event.target;
+    const frame = target.closest?.(foreground);
+    if (!frame || frame.hasAttribute('data-btw-motion') || target.closest(interactive)) return;
     try { overlay.setPointerCapture(event.pointerId); } catch { return; }
     event.preventDefault();
     gesture = { frame, id: event.pointerId, x, y, startX: event.clientX, startY: event.clientY };
@@ -75,12 +78,33 @@ function installExplorerDeckDrag(overlay) {
   } };
 }
 
-function useExplorerDeckDrag(overlay, visible) {
+function useExplorerDeckLayout(overlay, owner, visible) {
   const drag = React.useRef(null);
   React.useLayoutEffect(() => {
-    if (!visible || !overlay.current) return;
-    drag.current = installExplorerDeckDrag(overlay.current);
-    return () => { drag.current.dispose(); drag.current = null; };
-  }, [overlay, visible]);
+    const layer = overlay.current;
+    if (!visible || !layer) return;
+    // The portal covers the entire window, but its header owner sits in the conversation column.
+    const header = owner?.current?.closest('header');
+    function measure() {
+      if (!header) return;
+      const bounds = header.getBoundingClientRect();
+      const viewport = layer.getBoundingClientRect();
+      if (!bounds.width || !viewport.width) return;
+      layer.style.setProperty('--btw-chat-left', `${Math.max(0, bounds.left - viewport.left)}px`);
+      layer.style.setProperty('--btw-chat-right', `${Math.max(0, viewport.right - bounds.right)}px`);
+      drag.current?.reconcile();
+    }
+    measure();
+    drag.current = installExplorerDeckDrag(layer);
+    const observer = header && window.ResizeObserver ? new window.ResizeObserver(measure) : null;
+    observer?.observe(header);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+      drag.current.dispose();
+      drag.current = null;
+    };
+  }, [overlay, owner, visible]);
   React.useLayoutEffect(() => { drag.current?.reconcile(); });
 }

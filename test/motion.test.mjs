@@ -254,6 +254,24 @@ test('圆点地图的同排分支与下一层使用和坐标一致的动效方�
   assert.equal(app.animations.at(-1).frames[0].translate, '0px -10px');
 });
 
+test('点击卡外关闭整叠子卡，点击卡内及导航不会触发关闭', async (t) => {
+  const app = await mount(t);
+  await app.open();
+  await app.settle();
+  await app.navigate('第一个子卡');
+  await app.settle();
+  await act(async () => app.top().querySelector('header').click());
+  assert.ok(app.top());
+  const backdrop = app.overlay().querySelector('.dsh-btw-backdrop') ?? app.overlay();
+  await act(async () => backdrop.click());
+  assert.ok(!app.top(), '点击背景不留父卡在前台');
+  assert.equal(app.owner.hasAttribute('inert'), true, '关闭期间不可点穿背景');
+  await app.settle();
+  assert.equal(app.overlay(), null);
+  assert.equal(app.owner.hasAttribute('inert'), false);
+  assert.equal(document.activeElement, app.source);
+});
+
 test('退出完成前保留真实页面和主界面inert，结束后还原来源焦点与滚动', async (t) => {
   const app = await mount(t);
   const scroller = app.source.closest('[data-conversation-scroll]');

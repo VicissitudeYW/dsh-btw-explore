@@ -15,9 +15,9 @@ DSH 的旁路问答卡片树。在原页面上方打开子卡，沿用 DSH 的�
 - **分支**：继承来源卡的起始上下文，以及从第一轮到指定轮次的问答。后续轮次不会进入分支。
 - **卡内追问**：继续当前卡片的对话，不读取其他分支。
 
-在子卡里划词后，可点「探索引用」开下一层，也可点「从此轮分支」保留到该轮为止的上下文。圆点树独立悬浮在左侧，主聊天位于最上方，子卡向下展开，同轮分支排在同一层。圆点树平时灰显，悬停或键盘聚焦时清晰显示。点击圆点即可切换卡片；也可用方向键浏览，按 `Enter` 或空格切换。点「返回上层」或按 `Esc` 可逐层返回，点击最上方圆点则直接回到主聊天。
+在子卡里划词后，可点「探索引用」开下一层，也可点「从此轮分支」保留到该轮为止的上下文。圆点树独立悬浮在对话区左侧，主聊天位于最上方，子卡向下展开，同轮分支排在同一层。圆点树平时灰显，悬停或键盘聚焦时清晰显示。点击圆点即可切换卡片；也可用方向键浏览，按 `Enter` 或空格切换。点「返回上层」或按 `Esc` 可逐层返回，点击最上方圆点则直接回到主聊天。
 
-划词内容显示为子卡标题。拖动卡片页眉的把手可移动整叠卡片，切换时保留当前位置。父卡的阅读位置和草稿也会保留。系统开启「减少动态效果」时，卡片直接切换。要回看已保存的卡片，打开会话标签栏中与「对话」「轨迹」并列的「探索」。
+划词内容显示为子卡标题。拖动标题、卡片边缘或留白可移动整叠卡片；对话内容仍可划词，输入框和按钮照常使用。切换时保留卡片位置，点击卡片与圆点树之外的背景即可关闭整叠卡片。系统开启「减少动态效果」时，卡片直接切换。要回看已保存的卡片，打开会话标签栏中与「对话」「轨迹」并列的「探索」。
 
 子卡有自己的对话记录，初始模型和工作区来自主聊天，之后可以独立选择。发过消息的子卡也会出现在 DSH 的「未分组」会话列表。关闭空卡后仍可从树中回来继续。移除卡片会同时移除后代，对话记录仍可从 DSH 会话列表打开。
 
@@ -37,7 +37,7 @@ npm pack
 在需要使用的 profile 安装本地包，随后重启对应 DSH 实例：
 
 ```powershell
-$dshPackage = (Resolve-Path -LiteralPath './dsh-btw-explore-0.3.9.tgz').Path.Replace('\', '/')
+$dshPackage = (Resolve-Path -LiteralPath './dsh-btw-explore-0.3.10.tgz').Path.Replace('\', '/')
 dsh plugin --profile desktop add "file:$dshPackage"
 ```
 
@@ -45,7 +45,7 @@ Web profile 将 `desktop` 改为 `web`。本机桌面版若没有将 `dsh` 加�
 
 ```powershell
 $dshInstall = Read-Host '输入 DeepSeek Harness 安装目录'
-$dshPackage = (Resolve-Path -LiteralPath './dsh-btw-explore-0.3.9.tgz').Path.Replace('\', '/')
+$dshPackage = (Resolve-Path -LiteralPath './dsh-btw-explore-0.3.10.tgz').Path.Replace('\', '/')
 $env:ELECTRON_RUN_AS_NODE = '1'
 try {
   & "$dshInstall/DeepSeek Harness.exe" --expose-internals `
@@ -71,7 +71,7 @@ try {
 ```powershell
 npm test
 node test/host-smoke.mjs
-node test/host-smoke.mjs '--package=./dsh-btw-explore-0.3.9.tgz'
+node test/host-smoke.mjs '--package=./dsh-btw-explore-0.3.10.tgz'
 ```
 
 测试使用临时 DSH profile 和本地模拟模型，详情见[验证记录](docs/verification.md)。

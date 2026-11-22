@@ -3,7 +3,7 @@
   display: block;
   position: absolute;
   z-index: 2;
-  inset-inline-start: var(--btw-page-edge);
+  left: calc(var(--btw-chat-left) + var(--btw-page-edge));
   inset-block-start: 50%;
   transform: translateY(-50%);
   box-sizing: border-box;

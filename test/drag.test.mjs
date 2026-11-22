@@ -4,7 +4,9 @@ import test from 'node:test';
 import { JSDOM } from 'jsdom';
 
 const { window } = new JSDOM(`<div class="dsh-btw-overlay"><div class="dsh-btw-map"></div>
-  <div class="dsh-btw-page" data-btw-top><span data-btw-drag-handle></span><p>Text</p></div></div>`);
+  <div class="dsh-btw-page" data-btw-top><header><span data-btw-drag-handle></span><h1>Title</h1></header>
+    <section><p data-chat-flow-kind="assistant">Text</p><div data-composer-card><div contenteditable="true"></div></div></section>
+    <button>Return</button></div></div>`);
 const document = window.document;
 const overlay = document.querySelector('.dsh-btw-overlay');
 const card = document.querySelector('.dsh-btw-page');
@@ -17,7 +19,7 @@ const send = (target, type, x, y, pointerId = 1) => {
   target.dispatchEvent(event);
 };
 
-test('only the foreground handle can move a card within the viewport and left rail', () => {
+test('card chrome and empty space move the foreground without intercepting the chat or controls', () => {
   const source = readFileSync(new URL('../src/drag.js', import.meta.url), 'utf8');
   const install = Function('window', `${source}\nreturn installExplorerDeckDrag;`)(window);
   let width = 1000;
@@ -27,10 +29,14 @@ test('only the foreground handle can move a card within the viewport and left ra
   overlay.setPointerCapture = () => {};
   const drag = install(overlay);
 
-  send(card.querySelector('p'), 'pointerdown', 300, 100);
-  send(overlay, 'pointermove', 360, 120);
-  assert.equal(read('x'), 0, 'text selection must not move the deck');
-  send(handle, 'pointerdown', 300, 70);
+  for (const selector of ['p', 'button', '[data-composer-card]', '[contenteditable]']) {
+    const control = card.querySelector(selector);
+    send(control, 'pointerdown', 300, 100);
+    send(overlay, 'pointermove', 360, 120);
+    send(overlay, 'pointerup', 360, 120);
+    assert.equal(read('x'), 0, `${selector} must remain interactive`);
+  }
+  send(card.querySelector('h1'), 'pointerdown', 300, 70);
   send(overlay, 'pointermove', 360, 90, 2);
   assert.equal(read('x'), 0, 'another pointer cannot move the deck');
   send(overlay, 'pointermove', 360, 90);
@@ -40,12 +46,13 @@ test('only the foreground handle can move a card within the viewport and left ra
   send(overlay, 'lostpointercapture', -100, 950);
   send(overlay, 'pointermove', 500, 70);
   assert.equal(read('x'), -42, 'capture loss ends the gesture');
-  send(handle, 'pointerdown', 230, 100);
+  send(card.querySelector('section'), 'pointerdown', 230, 100);
   send(overlay, 'pointermove', 450, 100);
   assert.equal(read('x'), 92);
   width = 940;
   drag.reconcile();
   assert.equal(read('x'), 32, 'resize moves the deck back inside the viewport');
+  send(handle, 'pointerup', 450, 100);
   drag.dispose();
   assert.equal(read('x'), 0);
   assert.equal(overlay.hasAttribute('data-btw-dragging'), false);
