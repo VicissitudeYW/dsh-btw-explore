@@ -1,8 +1,11 @@
-# dsh-btw-explore
+<h1 align="center">dsh-btw-explore</h1>
 
-**在 DeepSeek Harness（DSH）里，划词开子卡，把追问留在自己的分支。**
+<p align="center"><strong>在 DeepSeek Harness（DSH）里，划词开子卡，把追问留在自己的分支。</strong></p>
 
-[![许可证：MIT](https://img.shields.io/badge/license-MIT-2EA44F)](LICENSE) [![已在 DSH 0.2.2-rc.5 验证](https://img.shields.io/badge/DSH-0.2.2--rc.5-3B69EC)](#安装)
+<p align="center">
+  <a href="LICENSE"><img alt="许可证：MIT" src="https://img.shields.io/badge/license-MIT-2EA44F"></a>
+  <a href="#安装"><img alt="已在 DSH 0.2.2-rc.5 验证" src="https://img.shields.io/badge/DSH-0.2.2--rc.5-3B69EC"></a>
+</p>
 
 在主聊天上方打开旁路对话，沿用 DSH 的原生界面与输入框。卡片保存在本机，关闭或重启后，也能从左侧圆点树回到原来的分支。
 
