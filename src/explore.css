@@ -30,13 +30,15 @@
 
 .dsh-btw-explore *, .dsh-btw-explore *::before, .dsh-btw-explore *::after { box-sizing: border-box; }
 .dsh-btw-explore ::selection { color: var(--btw-ink); background: color-mix(in srgb, var(--btw-accent) 19%, transparent); }
-.dsh-btw-explore button, .dsh-btw-explore textarea, .dsh-btw-explore input { font: inherit; }
+.dsh-btw-explore button:where(:not([data-text-interaction-surface] *)),
+.dsh-btw-explore textarea, .dsh-btw-explore input { font: inherit; }
 .dsh-btw-explore button { touch-action: manipulation; }
 .dsh-btw-entry { display: inline-flex; align-items: center; justify-content: center; min-height: 26px; padding: 3px 7px; border: 0; border-radius: 5px; background: transparent; color: var(--dsw-alias-label-secondary, #62626a); font: inherit; font-size: 12px; line-height: 1.4; cursor: pointer; touch-action: manipulation; }
 .dsh-btw-entry:hover:not(:disabled) { color: var(--dsw-alias-label-primary, #202024); background: color-mix(in srgb, var(--dsw-alias-label-primary, #202024) 6%, transparent); }
 .dsh-btw-entry:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #29292e); outline-offset: 2px; }
 .dsh-btw-entry:disabled { opacity: .42; cursor: default; }
-.dsh-btw-explore button:focus-visible, .dsh-btw-explore input:focus-visible { outline: 2px solid var(--btw-accent); outline-offset: 3px; }
+.dsh-btw-explore button:where(:not([data-text-interaction-surface] *, .dsh-btw-selection-button)):focus-visible,
+.dsh-btw-explore input:focus-visible { outline: 2px solid var(--btw-accent); outline-offset: 3px; }
 .dsh-btw-explore button:disabled { cursor: default; opacity: .42; }
 .dsh-btw-explore a { color: inherit; text-underline-offset: 3px; }
 
@@ -118,13 +120,12 @@
 .dsh-btw-answer pre { overflow-x: auto; max-width: 100%; }
 .dsh-btw-answer img { max-width: 100%; height: auto; }
 .dsh-btw-plain-answer { white-space: pre-wrap; }
-.dsh-btw-answer-selection { position: absolute; z-index: 2; display: flex; flex-wrap: wrap; gap: 2px; padding: 2px 3px; user-select: none; }
-.dsh-btw-explore .dsh-btw-answer-selection {
-  left: clamp(0px, calc(var(--btw-selection-x) - 82px), max(0px, calc(100% - 164px)));
-  width: min(164px, 100%); justify-content: center; background: var(--btw-raised);
-  border: 1px solid var(--btw-line); border-radius: 6px; box-shadow: 0 4px 12px rgb(14 15 21 / 14%);
+.dsh-btw-answer-selection {
+  --btw-selection-width: 166px;
+  position: absolute; z-index: 2; justify-content: center; user-select: none;
+  left: clamp(0px, calc(var(--btw-selection-x) - var(--btw-selection-width) / 2), calc(100% - min(100%, var(--btw-selection-width))));
+  width: min(var(--btw-selection-width), 100%);
 }
-.dsh-btw-answer-selection .dsh-btw-button { font-size: 12px; min-height: 28px; padding: 2px 6px; white-space: nowrap; }
 .dsh-btw-turn-state { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; color: var(--btw-muted); font-size: 12px; }
 .dsh-btw-turn-state > span { overflow-wrap: anywhere; }
 .dsh-btw-turn-state .dsh-btw-button { font-size: 12px; min-height: 28px; }
@@ -144,7 +145,31 @@
 .dsh-btw-preview-toggle input { accent-color: var(--btw-accent); width: 13px; height: 13px; margin: 0; cursor: pointer; }
 .dsh-btw-shortcut { color: var(--btw-muted); font-size: 11px; }
 
-.dsh-btw-selection-surface, .dsh-btw-selection-actions { display: inline-flex; align-items: center; gap: 6px; }
+[data-text-interaction-surface]:has([data-dsh-btw-selection]), .dsh-btw-answer-selection {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+}
+.dsh-btw-selection-actions { display: contents; }
+/* Match DSH's QuoteSelection action with its theme tokens, not its generated class name. */
+button.dsh-btw-selection-button {
+  padding: 5px 10px;
+  border: none;
+  border-radius: 999px;
+  corner-shape: round;
+  background: var(--dsw-alias-button-floating-fill, Canvas);
+  --dsw-elevation-stroke-color: var(--dsw-alias-border-l3);
+  box-shadow: var(--dsw-elevation-panel, 0 0 0 .5px rgb(127 127 127 / 40%), 0 3px 8px rgb(0 0 0 / 12%));
+  color: var(--dsw-alias-label-primary, CanvasText);
+  font: var(--dsw-font-xs-13, 400 13px/20px system-ui, sans-serif);
+  cursor: pointer;
+}
+button.dsh-btw-selection-button:focus-visible {
+  background: var(--dsw-alias-button-floating-hover, ButtonFace);
+}
+@media (hover: hover) {
+  button.dsh-btw-selection-button:hover:not(:disabled) {
+    background: var(--dsw-alias-button-floating-hover, ButtonFace);
+  }
+}
 
 .dsh-btw-overlay {
   --btw-page-inset: clamp(14px, 5dvh, 44px);

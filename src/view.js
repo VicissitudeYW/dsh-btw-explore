@@ -275,7 +275,7 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
         const scrollerRect = scope.getBoundingClientRect();
         next = { cardId: card.id, turnId: start.dataset.btwAnswer, quote,
           x: rect ? (rect.left + rect.right) / 2 - answerRect.left : 0,
-          y: rect ? (rect.top - scrollerRect.top >= 40 ? rect.top - 38 : rect.bottom + 4) - answerRect.top : 0 };
+          y: rect ? (rect.top - scrollerRect.top >= 38 ? rect.top - 38 : rect.bottom + 8) - answerRect.top : 0 };
       }
       setQuoteSelection((previous) => previous?.cardId === next?.cardId && previous?.turnId === next?.turnId
         && previous?.quote === next?.quote && previous?.x === next?.x && previous?.y === next?.y ? previous : next);
@@ -524,8 +524,8 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
           : h('div', { className: 'dsh-btw-plain-answer' }, turn.answer),
         selected && h('div', { className: 'dsh-btw-answer-selection', 'aria-label': '选区操作', role: 'group',
           style: { '--btw-selection-x': `${selected.x}px`, top: selected.y } },
-          [['child', '探索引用'], ['branch', '从此轮分支']].map(([relation, label]) => exploreButton(label, {
-            key: relation, disabled: Boolean(pending), 'aria-haspopup': 'dialog',
+          [['child', '探索引用'], ['branch', '从此轮分支']].map(([relation, label]) => h('button', {
+            key: relation, type: 'button', className: 'dsh-btw-selection-button', disabled: Boolean(pending), 'aria-haspopup': 'dialog',
             onPointerDown: (event) => event.preventDefault(),
             onClick: (event) => {
               const answer = event.currentTarget.closest('[data-btw-answer]');
@@ -535,7 +535,7 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
               }
               setQuoteSelection(null);
             },
-          }, 'quiet')),
+          }, label)),
         ),
       ),
       (running || turn.status in EXPLORE_TURN_ERRORS) && h('div', { className: 'dsh-btw-turn-state' },

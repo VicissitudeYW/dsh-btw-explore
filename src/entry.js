@@ -142,7 +142,6 @@ function supplementSelection(sessionId) {
   let disposed = false;
   const remove = () => {
     added?.remove();
-    surface?.classList.remove('dsh-btw-selection-surface');
     added = surface = undefined;
   };
   const sync = () => {
@@ -162,7 +161,7 @@ function supplementSelection(sessionId) {
     for (const [relation, label] of selectionActions(native)) {
       const button = document.createElement('button');
       button.type = 'button';
-      button.className = 'dsh-btw-entry';
+      button.className = 'dsh-btw-selection-button';
       button.textContent = label;
       button.setAttribute('aria-haspopup', 'dialog');
       button.addEventListener('pointerdown', (event) => event.preventDefault());
@@ -176,7 +175,6 @@ function supplementSelection(sessionId) {
       });
       added.append(button);
     }
-    surface.classList.add('dsh-btw-selection-surface');
     surface.appendChild(added);
   };
   const schedule = () => {
@@ -213,7 +211,7 @@ function AskSelection({ sessionId, useSession, readText, dismiss, clearSelection
   if (!selected || selected.region.dataset.conversationSession !== resolvedSessionId || !readText?.()?.trim()) return null;
   return h('span', { className: 'dsh-btw-selection-actions', 'data-dsh-btw-selection': 'native' },
     selectionActions(selected.native).map(([relation, label]) => h('button', { key: relation, type: 'button',
-      className: 'dsh-btw-entry', 'aria-haspopup': 'dialog', onPointerDown: (event) => event.preventDefault(), onClick: () => {
+      className: 'dsh-btw-selection-button', 'aria-haspopup': 'dialog', onPointerDown: (event) => event.preventDefault(), onClick: () => {
         const current = chatSelection();
         if (current?.region === selected.region && current.native === selected.native) {
           openChatSelection(current, relation);
