@@ -45,17 +45,33 @@ function exploreWhiteboardLayout(cards) {
 }
 
 const exploreNodeId = (node) => node.card?.id ?? '';
+const EXPLORE_RESIZE_EDGES = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'];
 
-function exploreWhiteboardEdge(node, point) {
-  const child = point(node);
-  const parent = point(node.parent);
-  const fromY = parent.y + node.parent.height / 2;
-  const toY = child.y + node.height / 2;
-  const right = child.x + node.width / 2 >= parent.x + node.parent.width / 2;
-  const fromX = parent.x + (right ? node.parent.width : 0);
-  const toX = child.x + (right ? 0 : node.width);
+function exploreWhiteboardEdge(node, box) {
+  const child = box(node);
+  const parent = box(node.parent);
+  const fromY = parent.y + parent.height / 2;
+  const toY = child.y + child.height / 2;
+  const right = child.x + child.width / 2 >= parent.x + parent.width / 2;
+  const fromX = parent.x + (right ? parent.width : 0);
+  const toX = child.x + (right ? 0 : child.width);
   const elbow = (fromX + toX) / 2;
   return `M ${fromX} ${fromY} C ${elbow} ${fromY} ${elbow} ${toY} ${toX} ${toY}`;
+}
+
+function exploreBoardSize(width, height) {
+  return {
+    width: Math.max(168, Math.min(960, width)),
+    height: Math.max(96, Math.min(720, height)),
+  };
+}
+
+function exploreResizePlacement({ x, y, width, height }, edge, dx, dy) {
+  const west = edge.includes('w');
+  const north = edge.includes('n');
+  const size = exploreBoardSize(width + (west ? -dx : edge.includes('e') ? dx : 0),
+    height + (north ? -dy : edge.includes('s') ? dy : 0));
+  return { x: west ? x + width - size.width : x, y: north ? y + height - size.height : y, ...size };
 }
 
 function exploreBoardPositions(key) {
@@ -94,9 +110,30 @@ function ExploreWhiteboard({ sessionId, cards = EXPLORE_EMPTY_CARDS, previews, M
   const camera = React.useRef({ x: 0, y: 0 });
   const gesture = React.useRef(null);
   const suppressClick = React.useRef(false);
-  const point = (node) => dragged?.key === exploreNodeId(node) ? dragged : positions.get(exploreNodeId(node)) ?? node;
-  const position = (node) => ({ left: point(node).x, top: point(node).y, width: node.width, height: node.height,
-    zIndex: dragged?.key === exploreNodeId(node) ? 2 : undefined });
+  function box(node) {
+    const key = exploreNodeId(node);
+    const placement = dragged?.key === key ? dragged : positions.get(key);
+    if (!placement) return node;
+    const { x, y } = placement;
+    if (!node.card) return { x, y, width: node.width, height: node.height };
+    return { x, y, ...exploreBoardSize(Number.isFinite(placement.width) ? placement.width : node.width,
+      Number.isFinite(placement.height) ? placement.height : node.height) };
+  }
+
+  function position(node) {
+    const { x, y, width, height } = box(node);
+    return { left: x, top: y, width, height, zIndex: dragged?.key === exploreNodeId(node) ? 2 : undefined };
+  }
+
+  function savePlacement(key, placement) {
+    const next = new Map([layout.home, ...layout.nodes]
+      .map(exploreNodeId).filter((id) => positions.has(id)).map((id) => [id, positions.get(id)]));
+    next.set(key, placement);
+    setPositions(next);
+    if (storageKey) {
+      try { window.localStorage.setItem(storageKey, JSON.stringify([...next])); } catch {}
+    }
+  }
 
   function moveCamera(x, y) {
     camera.current = { x, y };
@@ -105,7 +142,7 @@ function ExploreWhiteboard({ sessionId, cards = EXPLORE_EMPTY_CARDS, previews, M
   }
 
   function locateHome() {
-    const { x, y } = point(layout.home);
+    const { x, y } = box(layout.home);
     const height = viewport.current.clientHeight;
     moveCamera(layout.home.x - x, height ? Math.round((height - layout.home.height) / 2 - y) : 0);
   }
@@ -133,12 +170,13 @@ function ExploreWhiteboard({ sessionId, cards = EXPLORE_EMPTY_CARDS, previews, M
   function beginDrag(event) {
     if (gesture.current || event.button !== 0 || event.isPrimary === false) return;
     suppressClick.current = false;
-    const button = event.target.closest?.('button');
-    const key = button?.dataset.btwBoardCard ?? (button?.hasAttribute('data-btw-board-home') ? '' : null);
+    const target = event.target.closest?.('[data-btw-board-resize], button');
+    const edge = target?.dataset.btwResizeEdge;
+    const key = target?.dataset.btwBoardResize ?? target?.dataset.btwBoardCard ?? (target?.hasAttribute('data-btw-board-home') ? '' : null);
     const node = key === '' ? layout.home : key === null ? null : layout.nodes.find(({ card }) => card.id === key);
-    if (button && !node) return;
-    gesture.current = { id: event.pointerId, x: event.clientX, y: event.clientY, key,
-      origin: node ? point(node) : camera.current };
+    if (target && !node) return;
+    gesture.current = { id: event.pointerId, x: event.clientX, y: event.clientY, key, edge,
+      origin: node ? box(node) : camera.current };
   }
 
   function moveDrag(event) {
@@ -151,32 +189,28 @@ function ExploreWhiteboard({ sessionId, cards = EXPLORE_EMPTY_CARDS, previews, M
     if (!start.dragging) {
       try { view.setPointerCapture(event.pointerId); } catch { return; }
       start.dragging = true;
-      view.setAttribute('data-btw-panning', '');
+      if (start.edge) view.setAttribute('data-btw-resizing', start.edge);
+      else view.setAttribute('data-btw-panning', '');
     }
-    const x = start.origin.x + dx;
-    const y = start.origin.y + dy;
-    if (start.key === null) moveCamera(x, y);
-    else setDragged(start.point = { key: start.key, x, y });
+    const { x, y, width, height } = start.origin;
+    if (start.key === null) moveCamera(x + dx, y + dy);
+    else {
+      const placement = start.edge ? exploreResizePlacement(start.origin, start.edge, dx, dy)
+        : { x: x + dx, y: y + dy, width, height };
+      start.placement = placement;
+      setDragged({ key: start.key, ...placement });
+    }
   }
 
   function endDrag(event) {
     const start = gesture.current;
     if (start?.id !== event.pointerId) return;
     gesture.current = null;
-    event.currentTarget.removeAttribute('data-btw-panning');
+    event.currentTarget.removeAttribute(start.edge ? 'data-btw-resizing' : 'data-btw-panning');
     if (!start.dragging) return;
     suppressClick.current = true;
-    if (!start.point) return;
-    if (event.type === 'pointerup') {
-      const { key, x, y } = start.point;
-      const next = new Map([layout.home, ...layout.nodes]
-        .map(exploreNodeId).filter((id) => positions.has(id)).map((id) => [id, positions.get(id)]));
-      next.set(key, { x, y });
-      setPositions(next);
-      if (storageKey) {
-        try { window.localStorage.setItem(storageKey, JSON.stringify([...next])); } catch {}
-      }
-    }
+    if (!start.placement) return;
+    if (event.type === 'pointerup') savePlacement(start.key, start.placement);
     setDragged(null);
   }
 
@@ -221,7 +255,7 @@ function ExploreWhiteboard({ sessionId, cards = EXPLORE_EMPTY_CARDS, previews, M
     },
       h('div', { ref: stage, className: 'dsh-btw-board-stage', style: { width: layout.width, height: layout.height } },
         h('svg', { className: 'dsh-btw-board-links', width: layout.width, height: layout.height, 'aria-hidden': true, focusable: false },
-          layout.nodes.map((node) => h('path', { key: node.card.id, d: exploreWhiteboardEdge(node, point) }))),
+          layout.nodes.map((node) => h('path', { key: node.card.id, d: exploreWhiteboardEdge(node, box) }))),
         h('button', { type: 'button', 'data-btw-board-home': '', className: 'dsh-btw-board-home',
           style: position(layout.home), onClick: onReturnChat, title: '返回主聊天' }, exploreBoardIcon('chat'), '主聊天'),
         layout.nodes.map((node) => {
@@ -236,6 +270,18 @@ function ExploreWhiteboard({ sessionId, cards = EXPLORE_EMPTY_CARDS, previews, M
             h('button', { type: 'button', className: 'dsh-btw-board-open',
               title: title.length > 180 ? `${title.slice(0, 180)}…` : title, 'aria-label': title,
               'aria-haspopup': 'dialog', 'data-btw-board-card': card.id, onClick: (event) => onOpen(card, event.currentTarget),
+            }), EXPLORE_RESIZE_EDGES.map((edge) => {
+              const attrs = { key: edge, className: 'dsh-btw-board-resize', 'data-btw-board-resize': card.id, 'data-btw-resize-edge': edge };
+              if (edge !== 'se') return h('span', { ...attrs, 'aria-hidden': true });
+              return h('button', { ...attrs, type: 'button', 'aria-label': `调整卡片大小：${title}`,
+                onKeyDown: (event) => {
+                  const delta = { ArrowLeft: [-24, 0], ArrowRight: [24, 0], ArrowUp: [0, -24], ArrowDown: [0, 24] }[event.key];
+                  if (!delta || gesture.current) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  savePlacement(card.id, exploreResizePlacement(box(node), edge, ...delta));
+                },
+              });
             }));
         }),
       ),

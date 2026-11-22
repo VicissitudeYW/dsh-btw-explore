@@ -80,6 +80,7 @@
 }
 .dsh-btw-board-home > svg { flex: none; color: var(--btw-muted); }
 .dsh-btw-whiteboard .dsh-btw-board-card { flex-direction: column; gap: 8px; overflow: hidden; padding: 11px 12px; }
+.dsh-btw-board-card:focus-within { z-index: 1; }
 .dsh-btw-board-open {
   position: absolute;
   inset: 0;
@@ -91,6 +92,35 @@
   cursor: grab;
 }
 .dsh-btw-explore .dsh-btw-board-open:focus-visible { outline-offset: -3px; }
+.dsh-btw-board-resize {
+  position: absolute;
+  border: 0;
+  border-radius: 5px;
+  padding: 0;
+  background: transparent;
+  touch-action: none;
+}
+.dsh-btw-explore .dsh-btw-board-resize:focus-visible { outline-offset: -3px; }
+.dsh-btw-board-resize[data-btw-resize-edge="n"] { inset: 0 16px auto; height: 8px; }
+.dsh-btw-board-resize[data-btw-resize-edge="s"] { inset: auto 16px 0; height: 8px; }
+.dsh-btw-board-resize[data-btw-resize-edge="e"] { inset: 16px 0 16px auto; width: 8px; }
+.dsh-btw-board-resize[data-btw-resize-edge="w"] { inset: 16px auto 16px 0; width: 8px; }
+.dsh-btw-board-resize[data-btw-resize-edge="ne"] { inset: 0 0 auto auto; width: 16px; height: 16px; }
+.dsh-btw-board-resize[data-btw-resize-edge="se"] { inset: auto 0 0 auto; width: 16px; height: 16px; }
+.dsh-btw-board-resize[data-btw-resize-edge="sw"] { inset: auto auto 0 0; width: 16px; height: 16px; }
+.dsh-btw-board-resize[data-btw-resize-edge="nw"] { inset: 0 auto auto 0; width: 16px; height: 16px; }
+.dsh-btw-board-resize:is([data-btw-resize-edge="n"], [data-btw-resize-edge="s"]),
+.dsh-btw-board-viewport:is([data-btw-resizing="n"], [data-btw-resizing="s"]),
+.dsh-btw-board-viewport:is([data-btw-resizing="n"], [data-btw-resizing="s"]) * { cursor: ns-resize; }
+.dsh-btw-board-resize:is([data-btw-resize-edge="e"], [data-btw-resize-edge="w"]),
+.dsh-btw-board-viewport:is([data-btw-resizing="e"], [data-btw-resizing="w"]),
+.dsh-btw-board-viewport:is([data-btw-resizing="e"], [data-btw-resizing="w"]) * { cursor: ew-resize; }
+.dsh-btw-board-resize:is([data-btw-resize-edge="nw"], [data-btw-resize-edge="se"]),
+.dsh-btw-board-viewport:is([data-btw-resizing="nw"], [data-btw-resizing="se"]),
+.dsh-btw-board-viewport:is([data-btw-resizing="nw"], [data-btw-resizing="se"]) * { cursor: nwse-resize; }
+.dsh-btw-board-resize:is([data-btw-resize-edge="ne"], [data-btw-resize-edge="sw"]),
+.dsh-btw-board-viewport:is([data-btw-resizing="ne"], [data-btw-resizing="sw"]),
+.dsh-btw-board-viewport:is([data-btw-resizing="ne"], [data-btw-resizing="sw"]) * { cursor: nesw-resize; }
 .dsh-btw-board-card-head { display: flex; flex: none; align-items: start; justify-content: space-between; gap: 6px; width: 100%; }
 .dsh-btw-board-card-head > svg { flex: none; color: var(--btw-muted); }
 .dsh-btw-board-card:is(:hover, :focus-within) .dsh-btw-board-card-head > svg { color: var(--btw-accent); }
@@ -106,7 +136,7 @@
 .dsh-btw-board-preview {
   min-height: 0;
   min-width: 0;
-  max-height: 64px;
+  flex: 1 1 auto;
   overflow: hidden;
   overflow-wrap: anywhere;
   color: var(--btw-muted);
