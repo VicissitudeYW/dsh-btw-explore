@@ -145,7 +145,7 @@
 .dsh-btw-overlay {
   --btw-page-inset: clamp(14px, 5dvh, 44px);
   --btw-page-edge: clamp(10px, 2vw, 28px);
-  --btw-map-max: 54px;
+  --btw-map-max: 144px;
   --btw-map-gap: 18px;
   --btw-map-reserve: 0px;
   position: fixed;
@@ -190,10 +190,13 @@
 
 @keyframes dsh-btw-page-in { from { opacity: .6; translate: 0 10px; } }
 @keyframes dsh-btw-breathe { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+@media (max-width: 900px) {
+  .dsh-btw-overlay { --btw-map-max: 108px; --btw-map-gap: 12px; }
+}
 @media (max-width: 600px) {
   .dsh-btw-overlay {
     --btw-page-edge: 6px;
-    --btw-map-max: 54px;
+    --btw-map-max: 72px;
     --btw-map-gap: 8px;
   }
   .dsh-btw-page { border-radius: 10px; }

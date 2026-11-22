@@ -171,21 +171,73 @@ test('预览失败保留草稿并复用请求 ID，保存后续问并从首轮�
   assert.equal(view.source(), undefined, 'dismissing a page does not navigate to the chat tab');
 });
 
-test('圆点导航按纵向大纲排列，大量同级卡和深层子卡不会撑宽导航', () => {
-  const parent = makeCard();
-  const siblings = Array.from({ length: 30 }, () => makeCard(randomUUID(), { parentId: parent.id }));
-  const nested = [];
-  for (let index = 0; index < 30; index += 1) {
-    nested.push(makeCard(randomUUID(), { parentId: nested.at(-1)?.id ?? siblings[0].id }));
-  }
+test('二维导航由下向上逐层展开，分支与来源同层且保留真实来源链', () => {
+  const parent = makeCard('parent');
+  const child = makeCard('child', { parentId: 'parent', relation: 'child' });
+  const branch = makeCard('branch', { parentId: 'parent', relation: 'branch' });
+  const nested = makeCard('nested', { parentId: 'branch', relation: 'child' });
+  const layout = exploreNodeLayout([parent, child, branch, nested]);
+  const home = layout.nodes.find((node) => !node.card);
+  const node = (id) => layout.nodes.find((item) => item.card?.id === id);
+  assert.equal(home.depth, 0);
+  assert.equal(node('parent').depth, 1);
+  assert.equal(node('child').depth, 2);
+  assert.equal(node('branch').depth, 1, '分支保持与来源相同的空间层级');
+  assert.equal(node('nested').depth, 2);
+  assert.equal(home.y - node('parent').y, 72);
+  assert.equal(node('parent').y - node('child').y, 72);
+  assert.equal(node('branch').y, node('parent').y);
+  assert.ok(node('branch').x < node('parent').x, '分支在同层来源旁边展开');
+  assert.equal(node('parent').x - node('branch').x, 38);
+  assert.equal(node('branch').parent, node('parent'), '空间层级不应改写来源或导航链');
+  assert.equal(node('nested').parent, node('branch'));
+  assert.equal(home.x, layout.width / 2, '每层围绕画布中心排布');
+});
+
+test('宽树和深树保留完整坐标与点击区，孤立节点和循环数据也不会丢失', () => {
+  const parent = makeCard('parent');
+  const siblings = Array.from({ length: 30 }, (_, index) => makeCard(`s-${index}`, { parentId: parent.id, relation: 'child' }));
+  const nested = Array.from({ length: 30 }, (_, index) => makeCard(`n-${index}`, {
+    parentId: index ? `n-${index - 1}` : 's-0', relation: 'child',
+  }));
   const compact = exploreNodeLayout([parent, siblings[0]]);
-  const full = exploreNodeLayout([parent, ...siblings, ...nested]);
-  assert.equal(full.width, compact.width, '节点增加只能增加导航高度');
-  assert.equal(new Set(full.nodes.map((node) => node.y)).size, full.nodes.length, '每个节点应独占一行');
+  const cards = [parent, ...siblings, ...nested,
+    makeCard('orphan', { parentId: 'missing', relation: 'child' }),
+    makeCard('cycle-a', { parentId: 'cycle-b', relation: 'child' }),
+    makeCard('cycle-b', { parentId: 'cycle-a', relation: 'child' }),
+  ];
+  const full = exploreNodeLayout(cards);
+  assert.equal(full.nodes.length, cards.length + 1, '每张卡片都应在完整画布中可达');
+  assert.ok(full.width > compact.width, '宽树必须扩展画布，不能缩小或挤压点击区');
+  assert.equal(full.nodes.find((node) => node.card?.id === 'n-29').depth, 32, '深度不能截断');
+  const rows = new Map();
   for (const node of full.nodes) {
-    assert.ok(node.x >= 17 && node.x + 17 <= full.width, '圆点点击区应完整留在导航宽度内');
-    if (node.parent) assert.ok(node.y > node.parent.y, '子卡位于来源卡下方');
+    assert.ok(node.x - 18 >= 0 && node.x + 18 <= full.width, '36px 点击区应完整位于画布内');
+    assert.ok(node.y - 18 >= 0 && node.y + 18 <= full.height);
+    assert.ok(Number.isFinite(node.x) && Number.isFinite(node.y));
+    if (!rows.has(node.depth)) rows.set(node.depth, []);
+    rows.get(node.depth).push(node.x);
   }
+  for (const positions of rows.values()) {
+    positions.sort((a, b) => a - b);
+    for (let index = 1; index < positions.length; index += 1) {
+      assert.ok(positions[index] - positions[index - 1] >= 38, '同层点击区不能相互重叠');
+    }
+  }
+});
+
+test('交错创建的子卡按上一层来源顺序排布，避免把来源连线交叉', () => {
+  const cards = [makeCard('a'), makeCard('b'),
+    makeCard('b-child', { parentId: 'b', relation: 'child' }),
+    makeCard('a-child', { parentId: 'a', relation: 'child' }),
+    makeCard('a-child-next', { parentId: 'a', relation: 'child' }),
+  ];
+  const { nodes } = exploreNodeLayout(cards);
+  const node = (id) => nodes.find((item) => item.card?.id === id);
+  assert.ok(node('a').x < node('b').x);
+  assert.ok(node('a-child').x < node('b-child').x, '子卡横向位置应追随来源顺序而非全局创建时间');
+  assert.ok(node('a-child').x < node('a-child-next').x, '同来源的子卡保留原始顺序');
+  assert.ok(node('a-child-next').x < node('b-child').x);
 });
 
 test('独立的圆点导航保持焦点，切换同级卡后回到父卡会还原草稿和阅读位置', async (t) => {
@@ -217,9 +269,9 @@ test('独立的圆点导航保持焦点，切换同级卡后回到父卡会还�
   map.scrollTop = 44;
   await view.refresh();
   assert.equal(map.scrollTop, 44, '轮询不应打断正在浏览的导航位置');
-  Object.defineProperty(map, 'clientHeight', { value: 36 });
+  Object.defineProperties(map, { clientHeight: { value: 200 }, clientWidth: { value: 144 } });
   await act(async () => window.dispatchEvent(new window.Event('resize')));
-  assert.equal(map.scrollTop, parseFloat(node(child.title).style.top) - 18, '窗口变化后当前圆点应回到可视范围');
+  assert.equal(map.scrollTop, parseFloat(node(child.title).style.top) - 24, '窗口变化后当前圆点应居中，边缘留白由实际 stage padding 提供');
   await choose(sibling.title);
   await act(async () => {
     node(child.title).click();
