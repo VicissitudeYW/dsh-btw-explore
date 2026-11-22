@@ -17,6 +17,7 @@
     "scripts/build-client.mjs",
     "cordis.patch.yml",
     "docs/*.md",
+    "docs/showcase/explore-in-chat.jpg",
     "docs/showcase/card-tree.jpg",
     "docs/showcase/child-page.jpg",
     "docs/showcase/native-card-map.jpg",
