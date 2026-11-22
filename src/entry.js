@@ -133,7 +133,7 @@ function NativeExplorer({ sessionId, openView }) {
   }, [sessionId]);
   const current = board?.sessionId === sessionId ? board : null;
   return h(ExploreWhiteboard, {
-    key: sessionId, cards: current?.cards ?? EXPLORE_EMPTY_CARDS, previews: current?.previews ?? {},
+    key: sessionId, sessionId, cards: current?.cards ?? EXPLORE_EMPTY_CARDS, previews: current?.previews ?? {}, Markdown: ExplorerMarkdown,
     loading: current?.loading ?? true, error: current?.error,
     onOpen: (card, opener) => openSavedExplorerPage(sessionId, card.id, opener, 'board'),
     onReturnChat: typeof openView === 'function' ? () => openView('chat') : undefined,

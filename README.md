@@ -9,8 +9,6 @@
 
 在主聊天上方打开旁路对话，沿用 DSH 的原生界面与输入框。卡片保存在本机，关闭或重启后，也能从左侧圆点树回到原来的分支。
 
-![DSH 主聊天上方的划词子卡，卡内有一轮问答和原生输入框，左侧是悬浮圆点树](docs/showcase/explore-in-chat.jpg)
-
 ## 安装
 
 在 PowerShell 中从源码安装。需要 Git、Node.js 24 或更新版本，以及已安装的 DSH。以下命令以桌面 profile 为例；Web profile 把 `desktop` 改为 `web`。
@@ -18,14 +16,13 @@
 ```powershell
 git clone https://github.com/VicissitudeYW/dsh-btw-explore.git
 Set-Location dsh-btw-explore
-npm ci
 npm run build
 $archive = (npm pack --ignore-scripts --json | ConvertFrom-Json).filename
 $packagePath = (Resolve-Path -LiteralPath $archive).Path.Replace('\', '/')
 dsh plugin --profile desktop add "file:$packagePath"
 ```
 
-安装后重启对应的 DSH 实例。已克隆仓库的用户可以先更新源码，再从 `npm ci` 开始执行。安装和浏览器交互已在 DSH `0.2.2-rc.5` 中验证。
+安装后重启对应的 DSH 实例。已克隆仓库的用户可以先更新源码，再从 `npm run build` 开始执行。安装和浏览器交互已在 DSH `0.2.2-rc.5` 中验证。
 
 <details>
 <summary>PowerShell 找不到 dsh 命令？</summary>
@@ -51,7 +48,7 @@ $dshCli = Join-Path $dshInstall 'resources/runtime/cli/bin/dsh.cmd'
 | 追问某个细节 | 在当前子卡内继续发消息，追问留在这张卡里。 |
 | 开下一层子卡 | 在子卡里划词，点「解释」或「探索」。若引用的是回答，带入的是选中片段。 |
 | 从某一轮另开分支 | 在子卡里划词，点「从此轮分支」。新卡继承起始上下文和截至该轮的问答。 |
-| 浏览白板 | 滚动或拖动画布的空白处。点右上角的定位按钮回到主聊天节点。 |
+| 浏览白板 | 拖动空白处可自由平移，拖动小卡可调整位置，连线跟随。小卡位置保存在本机；点击小卡仍会打开对话。点右上角的定位按钮回到主聊天节点。 |
 | 切换或关闭 | 点击圆点切卡。按 `Esc` 逐层返回；点击最上方圆点或卡片与圆点树之外的背景可回到主聊天。 |
 
 切卡时，前卡左滑退到后方，目标卡移到前面。拖动标题、卡片边缘或留白可以移动卡片。圆点树支持方向键浏览、`Enter` 或空格打开；系统开启「减少动态效果」时直接切卡。
@@ -69,16 +66,6 @@ $dshCli = Join-Path $dshInstall 'resources/runtime/cli/bin/dsh.cmd'
 - **卡片数据库**：`$DSH_HOME/btw-explore/cards.sqlite`；未配置 `DSH_HOME` 时使用 `~/.dsh/btw-explore/cards.sqlite`。
 - **对话记录**：由 DSH 保存。完整备份需要同时保留 DSH 的会话数据和卡片数据库。
 - **上下文边界**：建卡时固定来源，后续追问不会改变已有分支的起点。带入的问答文本最多 24,000 字符，选区引用最多 4,000 字符，每个主聊天最多 500 张卡。
-
-## 开发与贡献
-
-```powershell
-npm ci
-npm test
-node test/host-smoke.mjs
-```
-
-宿主测试使用临时 DSH profile 和本地模拟模型。参见[设计说明](docs/design.md)与[验证记录](docs/verification.md)。欢迎在 [Issues](https://github.com/VicissitudeYW/dsh-btw-explore/issues) 提供复现步骤、DSH 版本和插件版本。
 
 ## 致谢与许可证
 
