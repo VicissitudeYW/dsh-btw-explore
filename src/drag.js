@@ -78,13 +78,16 @@ function installExplorerDeckDrag(overlay) {
   } };
 }
 
-function useExplorerDeckLayout(overlay, owner, visible) {
+function useExplorerDeckLayout(overlay, owner, visible, sessionId) {
   const drag = React.useRef(null);
   React.useLayoutEffect(() => {
     const layer = overlay.current;
     if (!visible || !layer) return;
     // The portal covers the entire window, but its header owner sits in the conversation column.
     const header = owner?.current?.closest('header');
+    const shell = (header?.closest('[data-slot="conversation.header"]') ?? header)?.parentElement;
+    let composer;
+    const observer = header && window.ResizeObserver ? new window.ResizeObserver(measure) : null;
     function measure() {
       if (!header) return;
       const bounds = header.getBoundingClientRect();
@@ -92,11 +95,21 @@ function useExplorerDeckLayout(overlay, owner, visible) {
       if (!bounds.width || !viewport.width) return;
       layer.style.setProperty('--btw-chat-left', `${Math.max(0, bounds.left - viewport.left)}px`);
       layer.style.setProperty('--btw-chat-right', `${Math.max(0, viewport.right - bounds.right)}px`);
+      if (!composer?.isConnected) {
+        if (composer) observer?.unobserve(composer);
+        const chat = [...(shell?.querySelectorAll('[data-conversation-content][data-conversation-session]') ?? [])]
+          .find((region) => region.dataset.conversationSession === sessionId);
+        composer = chat?.querySelector('[data-composer-card]');
+        if (composer) observer?.observe(composer);
+      }
+      const composerWidth = composer?.offsetWidth;
+      layer.toggleAttribute('data-btw-composer-width', Boolean(composerWidth));
+      if (composerWidth) layer.style.setProperty('--btw-main-composer-width', `${composerWidth}px`);
+      else layer.style.removeProperty('--btw-main-composer-width');
       drag.current?.reconcile();
     }
     measure();
     drag.current = installExplorerDeckDrag(layer);
-    const observer = header && window.ResizeObserver ? new window.ResizeObserver(measure) : null;
     observer?.observe(header);
     window.addEventListener('resize', measure);
     return () => {
@@ -105,6 +118,6 @@ function useExplorerDeckLayout(overlay, owner, visible) {
       drag.current.dispose();
       drag.current = null;
     };
-  }, [overlay, owner, visible]);
+  }, [overlay, owner, visible, sessionId]);
   React.useLayoutEffect(() => { drag.current?.reconcile(); });
 }

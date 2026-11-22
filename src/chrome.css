@@ -262,23 +262,8 @@
   min-height: 28px;
 }
 
-/* Resize only the native composer inside a card. Its controls and editor stay native. */
-.dsh-btw-native [data-composer-seat] {
-  --dsh-composer-card-max-width: 100%;
-}
-
-.dsh-btw-native [data-composer-card] {
-  row-gap: 2px;
-  padding-block-start: 3px;
-}
-
-.dsh-btw-native [data-composer-input] {
-  min-block-size: calc(24px + var(--dsh-content-font-delta, 0px));
-  padding-block-start: 2px;
-}
-
-.dsh-btw-native [data-input-scroll] {
-  max-block-size: min(var(--dsh-composer-text-max-height, 336px), max(88px, 23dvh));
+.dsh-btw-overlay[data-btw-composer-width] .dsh-btw-native [data-composer-card] {
+  max-inline-size: min(var(--dsh-composer-card-max-width), var(--btw-main-composer-width));
 }
 
 @container btw-explore (max-width: 700px) {

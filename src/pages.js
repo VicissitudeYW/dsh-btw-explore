@@ -218,7 +218,7 @@ function ExplorePages({ sessionId, request, Markdown, renderNative, portal, owne
   const opened = pages.length > 0;
   const visible = opened || leaving.length > 0;
   const swapping = Boolean(motion?.incomingKey && motion?.outgoingKey);
-  useExplorerDeckLayout(overlay, ownerRef, visible);
+  useExplorerDeckLayout(overlay, ownerRef, visible, sessionId);
   React.useLayoutEffect(() => {
     if (!visible || !portal) return;
     let owner = ownerRef.current;

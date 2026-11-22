@@ -168,8 +168,8 @@ button.dsh-btw-selection-button:focus-visible {
 }
 
 .dsh-btw-overlay {
-  --btw-page-inset: clamp(14px, 3.5dvh, 40px);
-  --btw-page-edge: clamp(10px, 2vw, 28px);
+  --btw-page-inset: clamp(10px, 2dvh, 26px);
+  --btw-page-edge: clamp(10px, 1.25vw, 20px);
   --btw-chat-left: 0px;
   --btw-chat-right: 0px;
   --btw-chat-width: calc(100% - var(--btw-chat-left) - var(--btw-chat-right));
@@ -194,8 +194,8 @@ button.dsh-btw-selection-button:focus-visible {
   right: calc(var(--btw-chat-right) + var(--btw-page-edge) - var(--btw-drag-x, 0px));
   margin: auto;
   box-sizing: border-box;
-  width: min(1040px, calc(var(--btw-chat-width) - 2 * var(--btw-page-edge) - var(--btw-map-reserve)));
-  height: min(960px, calc(100dvh - 2 * var(--btw-page-inset)));
+  width: min(1240px, calc(var(--btw-chat-width) - 2 * var(--btw-page-edge) - var(--btw-map-reserve)));
+  height: min(1080px, calc(100dvh - 2 * var(--btw-page-inset)));
   outline: none;
   overflow: hidden;
   background: var(--btw-bg);
