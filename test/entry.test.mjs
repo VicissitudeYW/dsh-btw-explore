@@ -10,20 +10,30 @@ globalThis.document = dom.window.document;
 globalThis.MutationObserver = dom.window.MutationObserver;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const { createRoot } = await import('react-dom/client');
+const { createPortal } = await import('react-dom');
 const read = (file) => fs.readFileSync(new URL(`../src/${file}.js`, import.meta.url), 'utf8');
 const source = [read('view'), 'ExploreView = mockExploreView;', read('drag'), read('pages'), read('navigation'), read('native'), read('entry')].join('\n');
 const overlay = () => document.querySelector('[role="dialog"][aria-modal="true"]');
 
-async function setup(t) {
-  document.body.innerHTML = '<header id="header"><div id="entry"></div><div data-conversation-tabs><button role="tab">对话</button><button role="tab">探索</button></div></header><div id="detail"></div>';
+async function setup(t, { cards, portal } = {}) {
+  document.body.innerHTML = '<div id="shell"><div data-slot="conversation.header"><header id="header"><div id="entry"></div><div data-conversation-tabs><button role="tab">对话</button><button role="tab">探索</button></div></header></div></div><div id="detail"></div>';
   const slots = new Map();
   const disposers = [];
   let lastDraft;
-  const plugin = Function('React', 'h', 'mockExploreView', 'EXPLORE_CSS', 'require', source)(
+  let openedCard;
+  const reads = [];
+  const plugin = Function('React', 'h', 'mockExploreView', 'EXPLORE_CSS', 'require', 'fetch', source)(
     React, React.createElement, (props) => {
       lastDraft = props.initialDraft;
+      if (props.onClosePage) openedCard = props.initialCardId;
       return props.onClosePage ? React.createElement('button', { onClick: props.onClosePage }, '返回主聊天') : null;
-    }, '', () => { throw new Error('no markdown'); },
+    }, '', (id) => {
+      if (id === 'react-dom' && portal) return { createPortal };
+      throw new Error('module unavailable');
+    }, async (path) => {
+      reads.push(new URL(path, 'https://test.invalid').searchParams.get('sessionId'));
+      return { ok: true, json: async () => ({ cards: cards ?? [] }) };
+    },
   );
   plugin.apply({
     get(name) {
@@ -51,7 +61,7 @@ async function setup(t) {
   });
   let navigations = 0;
   document.querySelector('[role="tab"] + [role="tab"]').addEventListener('click', () => navigations++);
-  return { slots, draft: () => lastDraft, navigations: () => navigations };
+  return { slots, draft: () => lastDraft, navigations: () => navigations, openedCard: () => openedCard, reads };
 }
 
 test('the tree is a conversation tab with no duplicate header or assistant action', async (t) => {
@@ -62,6 +72,49 @@ test('the tree is a conversation tab with no duplicate header or assistant actio
   assert.equal(app.navigations(), 1);
   assert.equal(overlay(), null);
   assert.equal(app.slots.has('conversation.chat.assistant-actions'), false);
+});
+
+test('main chat left edge reveals a saved card without an open dialog', async (t) => {
+  const app = await setup(t, { portal: true, cards: [{ id: 'saved', title: '既有卡片', relation: 'root' }] });
+  const mainMap = () => document.querySelector('.dsh-btw-chat-map');
+  const main = document.createElement('div');
+  main.dataset.conversationContent = '';
+  main.dataset.conversationSession = 'other-session';
+  main.innerHTML = '<div data-chat-flow></div>';
+  main.getBoundingClientRect = () => ({ left: 300, right: 1300, top: 75, bottom: 800, width: 1000, height: 725 });
+  await act(async () => document.querySelector('#shell').append(main));
+  assert.equal(mainMap(), null);
+  assert.deepEqual(app.reads, []);
+
+  await act(async () => { main.dataset.conversationSession = 'session-1'; });
+  const map = mainMap();
+  assert.ok(map, 'saved nodes are mounted in the main chat even without a dialog');
+  assert.equal(map.closest('[data-conversation-content]'), main);
+  assert.deepEqual(app.reads, ['session-1']);
+  assert.equal(overlay(), null);
+  const move = (x, y) => window.dispatchEvent(new window.PointerEvent('pointermove', { pointerType: 'mouse', clientX: x, clientY: y }));
+  map.getBoundingClientRect = () => ({ left: 306, right: 430, top: 340, bottom: 540 });
+  move(291, 480);
+  assert.equal(map.hasAttribute('data-btw-near'), false, 'sidebar is outside the reveal edge');
+  move(310, 218);
+  assert.equal(map.hasAttribute('data-btw-near'), true, 'main chat edge reveals the map beyond the vertical bounds of the map itself');
+  move(409, 480);
+  assert.equal(map.hasAttribute('data-btw-near'), true, 'pointer can move from the edge to the nodes');
+  move(700, 480);
+  assert.equal(map.hasAttribute('data-btw-near'), false);
+
+  move(310, 480);
+  const saved = map.querySelector('button[data-btw-node-key="saved"]');
+  await act(async () => saved.click());
+  assert.ok(overlay());
+  assert.equal(app.openedCard(), 'saved');
+  assert.ok(main.closest('[inert]'), 'the dialog suppresses the original chat rail');
+  await act(async () => overlay().querySelector('button').click());
+  assert.equal(overlay(), null);
+  assert.equal(document.activeElement, saved, 'the saved node remains connected for focus restoration');
+
+  await act(async () => main.querySelector('[data-chat-flow]').remove());
+  assert.equal(mainMap(), null, 'an inactive native chat has no main rail');
 });
 
 test('selection action coexists with an earlier native quote handler and preserves the source', async (t) => {

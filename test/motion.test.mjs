@@ -192,32 +192,46 @@ test('划词进入在清除选区后仍使用来源几何播放短距离展开',
   assert.ok(Math.hypot(x, y) <= 24.001, '远处来源的二维位移总长度不可超过24px（容许浮点误差）');
 });
 
-test('同级切换播放相反水平位移，重复点击当前页不重播', async (t) => {
+test('切换时前卡向左绕到后面，后卡推进，遮罩始终不动', async (t) => {
   const app = await mount(t);
   await app.open('first');
   await app.settle();
   const firstPage = app.top();
+  const overlay = app.overlay();
+  const backdrop = overlay.querySelector('.dsh-btw-backdrop');
   const count = app.animations.length;
   await app.navigate('第一个子卡');
   assert.equal(app.top(), firstPage);
   assert.equal(app.animations.length, count);
   await app.navigate('第二个子卡');
-  const next = app.animations.findLast((animation) => app.top().contains(animation.target));
-  assert.ok(next, '新目标必须实际启动动画');
-  assert.notEqual(next.target, app.top(), '文字动效不可移动整个卡框或露出后方主聊天');
-  assert.equal(app.animations.slice(count).length, 1, '切换期间离开的整张卡与遮罩不应变透明');
-  assert.ok(next.frames.every((frame) => !frame.scale), '日常切卡不缩放正文');
+  const swap = app.animations.slice(count);
+  const incoming = swap.find((animation) => animation.target === app.top());
+  const outgoing = swap.find((animation) => animation.target === firstPage);
+  assert.ok(incoming && outgoing, '前后两张完整卡面都必须实际交换位置');
+  assert.equal(swap.length, 2, '遮罩不能随前后卡面播放动画');
+  assert.equal(app.overlay(), overlay);
+  assert.equal(overlay.querySelector('.dsh-btw-backdrop'), backdrop);
+  assert.equal(firstPage.dataset.btwDeckFace, 'outgoing');
+  assert.equal(app.top().dataset.btwDeckFace, 'incoming');
+  assert.ok(swap.every(({ frames }) => frames.every((frame) => frame.opacity == null || frame.opacity === 1)));
+  assert.ok(outgoing.frames.some((frame) => parseFloat(frame.translate) < -12), '前卡要向左滑出足够距离');
+  assert.ok(outgoing.frames[0].zIndex > incoming.frames[0].zIndex, '旧卡最初在前');
+  assert.ok(outgoing.frames.at(-1).zIndex < incoming.frames.at(-1).zIndex, '新卡最终在前');
+  assert.ok(outgoing.frames.at(-1).scale < 1 && incoming.frames[0].scale < 1, '后方卡面要缩小以体现景深');
+  assert.equal(incoming.frames.at(-1).translate, '0% 0%');
+  assert.equal(incoming.frames.at(-1).scale, 1);
   assert.equal(app.top().dataset.btwMotion, 'switch-next');
-  assert.equal(next.frames[0].translate, '12px 0px');
   assert.equal(firstPage.isConnected, true, '离开的真实页面应保留至退出完成');
   assert.equal(firstPage.hasAttribute('inert'), true);
   assert.equal(firstPage.getAttribute('aria-hidden'), 'true');
   await app.settle();
   assert.equal(firstPage.isConnected, false);
+  assert.equal(app.top().hasAttribute('data-btw-deck-face'), false);
+  const nextPage = app.top();
   await app.navigate('第一个子卡');
-  const previous = app.animations.findLast((animation) => app.top().contains(animation.target));
+  const reverse = app.animations.findLast((animation) => animation.target === nextPage);
   assert.equal(app.top().dataset.btwMotion, 'switch-prev');
-  assert.equal(previous.frames[0].translate, '-12px 0px');
+  assert.ok(reverse.frames.some((frame) => parseFloat(frame.translate) < -12), '从任一方向换卡都以同样的左滑退到后面');
 });
 
 test('地图顶点从卡片树返回主聊天，但普通关闭仍保留原有返回行为', async (t) => {
@@ -240,18 +254,22 @@ test('地图顶点从卡片树返回主聊天，但普通关闭仍保留原有�
   assert.equal(app.overlay(), null);
 });
 
-test('圆点地图的同排分支与下一层使用和坐标一致的动效方向', async (t) => {
+test('从圆点进入下一层时，保留的父卡也参与换位并保留实例', async (t) => {
   const app = await mount(t);
   await app.open('parent');
   await app.settle();
-  await app.navigate('同排分支');
-  assert.match(app.animations.at(-1).frames[0].translate, /^-?12px 0px$/);
-  await app.settle();
+  const parent = app.top();
   await app.navigate('第一个子卡');
-  assert.equal(app.animations.at(-1).frames[0].translate, '0px 10px');
+  assert.equal(parent.dataset.btwDeckFace, 'outgoing');
+  assert.equal(parent.hasAttribute('inert'), true);
+  assert.equal(parent.hasAttribute('data-btw-leaving'), false, '祖先只退到后方，不卸载');
+  assert.equal(app.top().dataset.btwDeckFace, 'incoming');
   await app.settle();
+  assert.equal(parent.isConnected, true);
+  assert.equal(parent.hasAttribute('data-btw-deck-face'), false);
   await app.navigate('父卡');
-  assert.equal(app.animations.at(-1).frames[0].translate, '0px -10px');
+  assert.equal(app.top(), parent);
+  assert.equal(parent.dataset.btwDeckFace, 'incoming');
 });
 
 test('点击卡外关闭整叠子卡，点击卡内及导航不会触发关闭', async (t) => {
@@ -326,7 +344,7 @@ test('切换后的旧回退期限不会提前收束最新目标', async (t) => {
   const outgoing = app.top();
   await app.navigate('第三个子卡');
   const current = app.top();
-  await app.advance(60);
+  await app.advance(280);
   assert.equal(app.top(), current);
   assert.equal(current.dataset.btwMotion, 'switch-next');
   assert.equal(outgoing.isConnected, true);

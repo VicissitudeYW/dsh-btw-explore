@@ -172,6 +172,8 @@ function ExplorerHost({ sessionId, renderFactorySlot }) {
   React.useEffect(() => supplementSelection(sessionId), [sessionId]);
   return h(React.Fragment, null,
     h('span', { ref: owner, hidden: true, style: { display: 'none' } }),
+    explorerPortal && h(ExploreChatNavigation, { key: `chat-map:${sessionId}`, sessionId,
+      ownerRef: owner, request: explorerRequest, portal: explorerPortal }),
     h(ExplorePages, { key: sessionId, sessionId, request: explorerRequest, Markdown: ExplorerMarkdown,
       portal: explorerPortal, ownerRef: owner, onReturnChat: returnToChat,
       renderNative: typeof renderFactorySlot !== 'function' ? undefined : (card, ownerSessionId) =>

@@ -1,5 +1,3 @@
-/* Only the first entrance and final exit move the frame. In-deck navigation
-   keeps a single opaque card over the chat and animates only its contents. */
 .dsh-btw-overlay .dsh-btw-page { transition: none; }
 .dsh-btw-overlay .dsh-btw-page[data-btw-top] { animation: none; z-index: 2; }
 .dsh-btw-page-content { height: 100%; }
@@ -7,16 +5,21 @@
   transform-origin: var(--btw-motion-origin-x, 50%) var(--btw-motion-origin-y, 50%);
   will-change: translate, scale, opacity;
 }
-.dsh-btw-page[data-btw-motion-surface="content"] > .dsh-btw-page-content { will-change: translate, opacity; }
-.dsh-btw-overlay:not([data-btw-closing]) .dsh-btw-page:not([data-btw-top]) { visibility: hidden; }
+.dsh-btw-overlay:not([data-btw-closing]) .dsh-btw-page:not([data-btw-top], [data-btw-deck-face]) { visibility: hidden; }
 .dsh-btw-overlay .dsh-btw-page[data-btw-leaving] {
   z-index: 1;
   transform: none;
   pointer-events: none;
 }
+.dsh-btw-overlay .dsh-btw-page[data-btw-deck-face] {
+  transform-origin: center;
+  will-change: translate, scale, rotate;
+}
+.dsh-btw-overlay .dsh-btw-page[data-btw-deck-face="outgoing"] { z-index: 3; pointer-events: none; }
+.dsh-btw-overlay[data-btw-deck-swap] .dsh-btw-map { z-index: 4; }
 .dsh-btw-overlay[data-btw-closing] { pointer-events: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .dsh-btw-overlay .dsh-btw-page[data-btw-motion-surface="frame"],
-  .dsh-btw-page[data-btw-motion-surface="content"] > .dsh-btw-page-content { will-change: auto; }
+  .dsh-btw-overlay .dsh-btw-page[data-btw-deck-face] { will-change: auto; }
 }

@@ -81,7 +81,68 @@ function exploreEdge(node) {
   return `M ${fromX} ${source.y} C ${fromX + direction * 6} ${source.y} ${toX - direction * 6} ${node.y} ${toX} ${node.y}`;
 }
 
-function ExploreNavigation({ graph, activeId, onNavigate, returnLabel }) {
+function ExploreChatNavigation({ sessionId, ownerRef, request, portal }) {
+  const [region, setRegion] = React.useState(null);
+  const [cards, setCards] = React.useState(EXPLORE_EMPTY_CARDS);
+  const graph = React.useMemo(() => exploreNodeLayout(cards), [cards]);
+
+  React.useLayoutEffect(() => {
+    // DSH's header slot has a layout-neutral wrapper inside the conversation shell.
+    const header = ownerRef.current?.closest('header');
+    const shell = (header?.closest('[data-slot="conversation.header"]') ?? header)?.parentElement;
+    if (!shell || !sessionId) return;
+    let chat;
+    function sync() {
+      if (chat && shell.contains(chat) && chat.closest('[data-conversation-content]')?.dataset.conversationSession === sessionId) return;
+      const body = Array.from(shell.querySelectorAll('[data-conversation-content][data-conversation-session]'))
+        .find((candidate) => candidate.dataset.conversationSession === sessionId && !candidate.closest('[data-btw-native-card]'));
+      chat = body?.querySelector('[data-chat-flow]');
+      setRegion(chat ? body : null);
+    }
+    const observer = new MutationObserver(sync);
+    observer.observe(shell, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-conversation-session'] });
+    sync();
+    return () => observer.disconnect();
+  }, [sessionId, ownerRef]);
+
+  React.useEffect(() => {
+    if (!region) return;
+    let controller;
+    async function refresh() {
+      controller?.abort();
+      const signal = (controller = new AbortController()).signal;
+      try {
+        const result = await request(sessionId, { signal });
+        if (!signal.aborted) setCards(result.cards);
+      } catch {
+        // Keep the last tree through temporary connection losses.
+      }
+    }
+    let listeners = exploreChangeListeners.get(sessionId);
+    if (!listeners) exploreChangeListeners.set(sessionId, listeners = new Set());
+    listeners.add(refresh);
+    const onVisible = () => { if (!document.hidden) refresh(); };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVisible);
+    refresh();
+    return () => {
+      controller?.abort();
+      listeners.delete(refresh);
+      if (!listeners.size) exploreChangeListeners.delete(sessionId);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [sessionId, region, request]);
+
+  if (!region) return null;
+  return portal(h(ExploreNavigation, { graph, activeId: null, chatRegion: region, returnLabel: '主聊天',
+    onNavigate(trail, opener) {
+      const target = trail.at(-1);
+      if (target) openSavedExplorerPage(sessionId, target.id, opener, 'chat');
+    } }), region);
+}
+
+function ExploreNavigation({ graph, activeId, onNavigate, returnLabel, chatRegion }) {
   const { nodes, byId, width, height, fitWidth } = graph;
   const hasCards = nodes.length > 1;
   const map = React.useRef(null);
@@ -108,10 +169,21 @@ function ExploreNavigation({ graph, activeId, onNavigate, returnLabel }) {
     const reach = 24;
     // Observe proximity without enlarging the map's hit area over the backdrop.
     function update(event) {
+      if (event.pointerType !== 'mouse' || (chatRegion && chatRegion.closest('[inert]'))) { clear(); return; }
+      const { clientX: x, clientY: y } = event;
+      if (chatRegion) {
+        const bounds = chatRegion.getBoundingClientRect();
+        const inChat = x >= bounds.left && x < bounds.right && y >= bounds.top && y < bounds.bottom;
+        const nearEdge = inChat && x <= bounds.left + 48;
+        const overMap = element.contains(event.target instanceof window.Node ? event.target : null);
+        const rect = element.hasAttribute('data-btw-near') && element.getBoundingClientRect();
+        const nearMap = rect && x >= rect.left - 12 && x <= rect.right + 12 && y >= rect.top - 12 && y <= rect.bottom + 12;
+        element.toggleAttribute('data-btw-near', inChat && (nearEdge || overMap || Boolean(nearMap)));
+        return;
+      }
       const { left, top, right, bottom } = element.getBoundingClientRect();
-      element.toggleAttribute('data-btw-near', event.pointerType === 'mouse'
-        && event.clientX >= left - reach && event.clientX <= right + reach
-        && event.clientY >= top - reach && event.clientY <= bottom + reach);
+      element.toggleAttribute('data-btw-near', x >= left - reach && x <= right + reach
+        && y >= top - reach && y <= bottom + reach);
     }
     const clear = () => element.removeAttribute('data-btw-near');
     window.addEventListener('pointermove', update, { passive: true });
@@ -123,7 +195,7 @@ function ExploreNavigation({ graph, activeId, onNavigate, returnLabel }) {
       window.removeEventListener('blur', clear);
       clear();
     };
-  }, [hasCards]);
+  }, [hasCards, chatRegion]);
 
   function readScroll() {
     const area = viewport.current;
@@ -291,8 +363,8 @@ function ExploreNavigation({ graph, activeId, onNavigate, returnLabel }) {
     bringIntoView(target);
   }
 
-  return h('nav', { ref: map, className: 'dsh-btw-map', 'aria-label': '探索卡片关系导航',
-    style: { '--btw-map-content-height': `${height + 48}px` } },
+  return h('nav', { ref: map, className: chatRegion ? 'dsh-btw-chat-map' : 'dsh-btw-map', 'aria-label': '探索卡片关系导航',
+    style: { '--btw-map-content-height': `${height + 48}px`, '--btw-map-content-width': `${fitWidth}px` } },
     h('div', { className: 'dsh-btw-map-viewport', ref: viewport, 'data-btw-dragging': dragging || undefined,
       onScroll: readScroll,
       onPointerDown: (event) => {
@@ -347,7 +419,7 @@ function ExploreNavigation({ graph, activeId, onNavigate, returnLabel }) {
               onKeyDown: (event) => moveFocus(event, node),
               onClick: (event) => {
                 event.currentTarget.focus({ preventScroll: true });
-                onNavigate(exploreTrail(node.card, byId));
+                onNavigate(exploreTrail(node.card, byId), event.currentTarget);
               },
             }, h('span', { className: 'dsh-btw-map-halo', 'aria-hidden': true }),
             h('span', { className: 'dsh-btw-map-dot', 'aria-hidden': true }));

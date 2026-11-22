@@ -263,8 +263,11 @@
 }
 
 /* Resize only the native composer inside a card. Its controls and editor stay native. */
+.dsh-btw-native [data-composer-seat] {
+  --dsh-composer-card-max-width: 100%;
+}
+
 .dsh-btw-native [data-composer-card] {
-  max-inline-size: min(100%, 600px);
   row-gap: 2px;
   padding-block-start: 3px;
 }
