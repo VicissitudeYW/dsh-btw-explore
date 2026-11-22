@@ -145,7 +145,9 @@
 .dsh-btw-overlay {
   --btw-page-inset: clamp(14px, 5dvh, 44px);
   --btw-page-edge: clamp(10px, 2vw, 28px);
-  --btw-map-max: 144px;
+  --btw-map-base: 144px;
+  --btw-map-limit: 32dvw;
+  --btw-map-width: clamp(var(--btw-map-base), var(--btw-map-content-width, 0px), var(--btw-map-limit));
   --btw-map-gap: 18px;
   --btw-map-reserve: 0px;
   position: fixed;
@@ -153,7 +155,7 @@
   z-index: 100;
   background: rgb(14 15 21 / 34%);
 }
-.dsh-btw-overlay[data-btw-has-map] { --btw-map-reserve: calc(var(--btw-map-max) + var(--btw-map-gap)); }
+.dsh-btw-overlay[data-btw-has-map] { --btw-map-reserve: calc(var(--btw-map-width) + var(--btw-map-gap)); }
 
 .dsh-btw-page {
   position: absolute;
@@ -191,12 +193,13 @@
 @keyframes dsh-btw-page-in { from { opacity: .6; translate: 0 10px; } }
 @keyframes dsh-btw-breathe { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
 @media (max-width: 900px) {
-  .dsh-btw-overlay { --btw-map-max: 108px; --btw-map-gap: 12px; }
+  .dsh-btw-overlay { --btw-map-base: 108px; --btw-map-gap: 12px; }
 }
 @media (max-width: 600px) {
   .dsh-btw-overlay {
     --btw-page-edge: 6px;
-    --btw-map-max: 72px;
+    --btw-map-base: 72px;
+    --btw-map-limit: min(32dvw, calc(100dvw - 2 * var(--btw-page-edge) - var(--btw-map-gap) - 280px));
     --btw-map-gap: 8px;
   }
   .dsh-btw-page { border-radius: 10px; }

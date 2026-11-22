@@ -7,7 +7,7 @@
   inset-block-start: 50%;
   transform: translateY(-50%);
   box-sizing: border-box;
-  width: var(--btw-map-max);
+  width: var(--btw-map-width);
   height: min(60dvh, 480px, max(200px, var(--btw-map-content-height, 200px)));
   font: 12px/1.45 var(--dsw-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   color: var(--btw-ink);
@@ -117,7 +117,7 @@
   flex-direction: column;
   gap: 3px;
   width: max-content;
-  max-width: min(250px, calc(100dvw - var(--btw-map-max) - 32px));
+  max-width: min(250px, calc(100dvw - var(--btw-map-width) - 32px));
   padding: 10px 13px;
   border: 1px solid var(--btw-line);
   border-radius: 12px;

@@ -180,6 +180,7 @@ function ExplorePages({ sessionId, request, Markdown, renderNative, portal, owne
   const [deck, setDeck] = React.useState({ pages: [], leaving: [], revision: 0, motion: null, restore: null });
   const { pages, leaving, motion } = deck;
   const [cards, setCards] = React.useState(EXPLORE_EMPTY_CARDS);
+  const graph = React.useMemo(() => exploreNodeLayout(cards), [cards]);
   const overlay = React.useRef(null);
   const committedPages = React.useRef(new Set());
   const focusedPage = React.useRef(null);
@@ -316,6 +317,7 @@ function ExplorePages({ sessionId, request, Markdown, renderNative, portal, owne
     'aria-labelledby': opened ? titleId : undefined, 'aria-label': opened ? undefined : homeLabel,
     'data-btw-motion': motion?.kind, 'data-btw-closing': !opened ? '' : undefined,
     'data-btw-has-map': cards.length ? '' : undefined,
+    style: cards.length ? { '--btw-map-content-width': `${graph.fitWidth}px` } : undefined,
   },
     [...leaving, ...pages].map((page) => h(ExplorerPage, {
       key: page.key, sessionId, page, isTop: page === pages.at(-1), isLeaving: leaving.includes(page),
@@ -323,7 +325,7 @@ function ExplorePages({ sessionId, request, Markdown, renderNative, portal, owne
       isNested: leaving.includes(page) ? page.leavingNested : pages.indexOf(page) > 0, titleId, homeLabel,
       request, Markdown, renderNative, dismiss, bindCard, navigate, onReadCards: setCards,
     })),
-    h(ExploreNavigation, { cards, activeId, returnLabel: homeLabel,
+    h(ExploreNavigation, { graph, activeId, returnLabel: homeLabel,
       onNavigate: (trail) => navigate(trail, true) }),
   );
   return portal ? portal(stack, document.body) : stack;

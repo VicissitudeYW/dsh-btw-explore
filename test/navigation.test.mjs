@@ -10,7 +10,7 @@ globalThis.document = dom.window.document;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const { createRoot } = await import('react-dom/client');
 const read = (name) => fs.readFileSync(new URL(`../src/${name}.js`, import.meta.url), 'utf8');
-const { ExploreNavigation } = Function('React', 'h', `${read('view')}\n${read('navigation')}\nreturn { ExploreNavigation };`)(React, React.createElement);
+const { ExploreNavigation, exploreNodeLayout } = Function('React', 'h', `${read('view')}\n${read('navigation')}\nreturn { ExploreNavigation, exploreNodeLayout };`)(React, React.createElement);
 
 let viewportSize = { width: 144, height: 200 };
 Object.defineProperties(window.HTMLElement.prototype, {
@@ -20,17 +20,19 @@ Object.defineProperties(window.HTMLElement.prototype, {
 
 const card = (id, extra = {}) => ({ id, title: id, parentId: null, relation: 'root', ...extra });
 
-async function mount(t, cards, activeId) {
+async function mount(t, cards, activeId, size = { width: 144, height: 200 }) {
   document.body.innerHTML = '<div id="root"></div>';
-  viewportSize = { width: 144, height: 200 };
+  viewportSize = size;
   const moves = [];
   const root = createRoot(document.querySelector('#root'));
   t.after(async () => { await act(async () => root.unmount()); });
+  let graph = exploreNodeLayout(cards);
   const render = async (nextCards = cards, nextActive = activeId) => {
+    if (nextCards !== cards) graph = exploreNodeLayout(nextCards);
     cards = nextCards;
     activeId = nextActive;
     await act(async () => root.render(React.createElement(ExploreNavigation, {
-      cards, activeId, returnLabel: '返回主聊天', onNavigate: (trail) => moves.push(trail.map((item) => item.id)),
+      graph, activeId, returnLabel: '返回主聊天', onNavigate: (trail) => moves.push(trail.map((item) => item.id)),
     })));
   };
   await render();
@@ -59,6 +61,36 @@ async function pointer(target, type, properties = {}) {
 const position = (view, id) => ({
   x: parseFloat(view.node(id).style.left) + (parseFloat(view.stage()?.style.paddingLeft) || 0) - view.area.scrollLeft,
   y: parseFloat(view.node(id).style.top) + (parseFloat(view.stage()?.style.paddingTop) || 0) - view.area.scrollTop,
+});
+
+test('同层四点可以放下时，打开或切到两端都不会裁掉另一端', async (t) => {
+  const cards = ['left', 'middle-left', 'middle-right', 'right'].map((id) => card(id));
+  const view = await mount(t, cards, 'middle-left', { width: 170, height: 200 });
+  const assertVisible = () => {
+    for (const { id } of cards) {
+      const { x } = position(view, id);
+      assert.ok(x - 18 >= 10 && x + 18 <= viewportSize.width - 10,
+        `${id} 的点击区和焦点环应完整显示（中心 x=${x}）`);
+    }
+  };
+  assertVisible();
+  for (const id of ['right', 'left']) {
+    await act(async () => view.node(id).click());
+    await view.render(cards, id);
+    assertVisible();
+  }
+  assert.deepEqual(view.moves, [['right'], ['left']]);
+  await act(async () => view.area.dispatchEvent(new window.WheelEvent('wheel', { deltaX: 500, bubbles: true, cancelable: true })));
+  assertVisible();
+  viewportSize.width = 72;
+  await act(async () => window.dispatchEvent(new window.Event('resize')));
+  await act(async () => view.node('left').focus());
+  await key(view.node('left'), 'End');
+  assert.equal(document.activeElement, view.node('right'));
+  assert.equal(position(view, 'right').x, 36, '窄屏仍能浏览到最右圆点');
+  viewportSize.width = 170;
+  await act(async () => window.dispatchEvent(new window.Event('resize')));
+  assertVisible();
 });
 
 test('悬停和空间方向键显示标题，只保留一个 Tab 入口且浏览不会切卡', async (t) => {
@@ -267,14 +299,14 @@ test('后台增加深层卡改变视口高度时保留锚点，并补偿实际 p
 });
 
 test('删卡后无法保留越界锚点时使用真实画布边界夹取', async (t) => {
-  const cards = [card('parent'), ...Array.from({ length: 4 }, (_, index) => card(`child-${index}`, { parentId: 'parent', relation: 'child' }))];
+  const cards = [card('parent'), ...Array.from({ length: 5 }, (_, index) => card(`child-${index}`, { parentId: 'parent', relation: 'child' }))];
   const view = await mount(t, cards, 'parent');
   view.area.scrollLeft = 17;
   await act(async () => view.area.dispatchEvent(new window.Event('scroll')));
   await view.render(cards.slice(0, -1), 'parent');
   assert.equal(view.area.scrollLeft, 0, '画布缩窄时不能滚到负偏移以勉强保留原锚点');
   await act(async () => view.area.dispatchEvent(new window.WheelEvent('wheel', { deltaX: 10000, bubbles: true, cancelable: true })));
-  assert.equal(view.area.scrollLeft, 76, '滚轮边界依据更新后的画布宽度，而不是初次挂载宽度');
+  assert.equal(view.area.scrollLeft, 114, '滚轮边界依据更新后的超宽画布，而不是初次挂载宽度');
 });
 
 test('滚轮支持双轴与 Shift 横向浏览，拖动画布超过阈值后不误切卡', async (t) => {

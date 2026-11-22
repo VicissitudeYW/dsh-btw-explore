@@ -1,6 +1,8 @@
 const EXPLORE_NODE_STEP = 38;
 const EXPLORE_LAYER_STEP = 72;
 const EXPLORE_MAP_PADDING = 24;
+const EXPLORE_MAP_X_MARGIN = 18 + 10; // Node hit radius plus the horizontal fade.
+const EXPLORE_MAP_Y_MARGIN = 18 + 20;
 
 function exploreNodeLayout(cards) {
   const byId = new Map(cards.map((card) => [card.id, card]));
@@ -50,7 +52,8 @@ function exploreNodeLayout(cards) {
       node.y = EXPLORE_MAP_PADDING + (depth - level) * EXPLORE_LAYER_STEP;
     });
   }
-  return { nodes, byId, width, height };
+  const fitWidth = width + 2 * (EXPLORE_MAP_X_MARGIN - EXPLORE_MAP_PADDING);
+  return { nodes, byId, width, height, fitWidth };
 }
 
 function exploreEdge(node) {
@@ -81,8 +84,9 @@ function exploreEdge(node) {
     d: `M ${fromX} ${source.y} C ${fromX + direction * 6} ${source.y} ${toX - direction * 6} ${node.y} ${toX} ${node.y}` };
 }
 
-function ExploreNavigation({ cards, activeId, onNavigate, returnLabel }) {
-  const { nodes, byId, width, height } = React.useMemo(() => exploreNodeLayout(cards), [cards]);
+function ExploreNavigation({ graph, activeId, onNavigate, returnLabel }) {
+  const { nodes, byId, width, height, fitWidth } = graph;
+  const hasCards = nodes.length > 1;
   const viewport = React.useRef(null);
   const stage = React.useRef(null);
   const buttons = React.useRef(new Map());
@@ -123,10 +127,12 @@ function ExploreNavigation({ cards, activeId, onNavigate, returnLabel }) {
     if (!area || !metrics) return;
     const x = node.x + metrics.padX;
     const y = node.y + metrics.padY;
-    if (center || x - 18 < area.scrollLeft || x + 18 > area.scrollLeft + metrics.width
-      || y - 18 < area.scrollTop || y + 18 > area.scrollTop + metrics.height) {
-      scrollTo(x - metrics.width / 2, y - metrics.height / 2);
-    }
+    const moveX = !metrics.fitsX && (center || x - EXPLORE_MAP_X_MARGIN < area.scrollLeft
+      || x + EXPLORE_MAP_X_MARGIN > area.scrollLeft + metrics.width);
+    const moveY = center || y - EXPLORE_MAP_Y_MARGIN < area.scrollTop
+      || y + EXPLORE_MAP_Y_MARGIN > area.scrollTop + metrics.height;
+    if (moveX || moveY) scrollTo(moveX ? x - metrics.width / 2 : area.scrollLeft,
+      moveY ? y - metrics.height / 2 : area.scrollTop);
   }
 
   function finishDrag(event) {
@@ -143,8 +149,9 @@ function ExploreNavigation({ cards, activeId, onNavigate, returnLabel }) {
     const surface = stage.current;
     if (!area || !surface) { layout.current = null; return; }
     const previous = layout.current;
-    const metrics = { width: area.clientWidth, height: area.clientHeight,
-      padX: Math.max(0, area.clientWidth / 2 - EXPLORE_MAP_PADDING),
+    const fitsX = area.clientWidth >= fitWidth;
+    const metrics = { width: area.clientWidth, height: area.clientHeight, fitsX,
+      padX: fitsX ? (area.clientWidth - width) / 2 : Math.max(0, area.clientWidth / 2 - EXPLORE_MAP_PADDING),
       padY: Math.max(0, area.clientHeight / 2 - EXPLORE_MAP_PADDING),
       left: area.scrollLeft, top: area.scrollTop };
     surface.style.paddingLeft = surface.style.paddingRight = `${metrics.padX}px`;
@@ -189,6 +196,7 @@ function ExploreNavigation({ cards, activeId, onNavigate, returnLabel }) {
           previous.metrics.top + newAnchor.y - oldAnchor.y + paddingY, metrics);
       }
     }
+    if (fitsX && area.scrollLeft !== 0) area.scrollLeft = 0;
     readScroll();
     if (focused && !nodes.some((node) => keyFor(node) === focused) && document.activeElement === document.body) {
       let target = previous?.nodes.find((node) => keyFor(node) === focused)?.parent;
@@ -224,8 +232,8 @@ function ExploreNavigation({ cards, activeId, onNavigate, returnLabel }) {
       window.removeEventListener('blur', finishDrag);
       finishDrag();
     };
-  }, [Boolean(cards.length)]);
-  if (!cards.length) return null;
+  }, [hasCards]);
+  if (!hasCards) return null;
   const activePath = new Set();
   for (let node = currentNode; node && !activePath.has(node); node = node.parent) activePath.add(node);
   const edges = nodes.filter((node) => node.parent).map((node, index) => ({ node, ...exploreEdge(node), id: `${hintId}-edge-${index}` }));
