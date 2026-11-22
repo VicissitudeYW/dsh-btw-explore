@@ -56,7 +56,7 @@ function card(id, title, parentId = null) {
 // JSDOM does not render WAAPI. Control its promises and the component-local
 // fallback clock together; React, JSDOM and global timers keep their real clocks.
 async function mount(t, { reduced = false, support = true, native = false, initialRead, nativeOpen, nativeDetails,
-  inertAwareFocus = false, clock = motionClock(), onReturnChat } = {}) {
+  inertAwareFocus = false, clock = motionClock(), onReturnChat, onBoardClose } = {}) {
   const { ExploreView, ExplorePages, openExplorerPage, openSavedExplorerPage } = loadComponents(
     React, React.createElement, clock.setTimeout, clock.clearTimeout,
   );
@@ -109,7 +109,7 @@ async function mount(t, { reduced = false, support = true, native = false, initi
   async function request(_session, { cardId, action, body }) {
     if (action) {
       requests.push({ action, body });
-      if (action === 'open-native') {
+      if (action === 'open-native' || action === 'explain-native') {
         await nativeOpen;
         const created = card(body.cardId, body.parentId ? '新子卡' : '新根卡', body.parentId);
         cards.push({ ...created, nativeSessionId: `native:${body.cardId}`, nativeReady: true });
@@ -139,6 +139,7 @@ async function mount(t, { reduced = false, support = true, native = false, initi
     React.createElement(ExploreView, { sessionId, request }),
     React.createElement(ExplorePages, { sessionId, request, portal: createPortal, ownerRef: { current: source },
       onReturnChat: onReturnChat && (() => onReturnChat(owner)),
+      onBoardClose,
       renderNative: native ? (item) => React.createElement(NativeSession, { cardId: item.id }) : undefined }),
   )));
   const top = () => document.querySelector('.dsh-btw-page[data-btw-top]');
@@ -157,16 +158,16 @@ async function mount(t, { reduced = false, support = true, native = false, initi
   });
   return { source, owner, animations, nativeMounts, requests, refusedFocus, top, overlay, settle, navigate, close, unmount, listeners,
     advance: (milliseconds) => act(async () => clock.advance(milliseconds)),
-    open: (id = 'parent') => act(async () => openSavedExplorerPage(sessionId, id, source)),
-    draft: (opener) => act(async () => openExplorerPage(sessionId, {
-      key: 'child-draft', relation: 'child', parentId: 'parent', anchorTurnId: 'parent-turn', quote: '选中的来源', preview: true,
+    open: (id = 'parent', origin = 'card') => act(async () => openSavedExplorerPage(sessionId, id, source, origin)),
+    draft: (opener, explain = false) => act(async () => openExplorerPage(sessionId, {
+      key: 'child-draft', relation: 'child', parentId: 'parent', anchorTurnId: 'parent-turn', quote: '选中的来源', preview: true, explain,
     }, opener)),
     rootDraft: () => act(async () => openExplorerPage(sessionId, { key: 'root-draft', relation: 'root', preview: true }, source)),
     reduce: () => act(async () => { media.matches = true; for (const listener of listeners) listener({ matches: true }); }),
   };
 }
 
-test('划词进入在清除选区后仍使用来源几何播放短距离展开', async (t) => {
+test('划词打开及重开都从选区附近展开，显著区别于普通进场', async (t) => {
   const app = await mount(t);
   const text = document.querySelector('#quote').firstChild;
   const range = document.createRange();
@@ -177,19 +178,75 @@ test('划词进入在清除选区后仍使用来源几何播放短距离展开',
   document.getSelection().removeAllRanges();
   const incoming = app.animations.find((animation) => animation.target === app.top());
   assert.ok(incoming, '实际页面节点必须播放WAAPI动画');
-  assert.equal(app.top().dataset.btwMotion, 'enter');
+  assert.equal(app.top().dataset.btwMotion, 'source-enter');
   assert.equal(incoming.frames[0].translate, '0px -6px');
-  assert.equal(Number(incoming.frames[0].scale), 0.985);
+  assert.ok(Number(incoming.frames[0].scale) <= 0.8);
+  assert.ok(incoming.frames[0].opacity < 0.4);
+  assert.equal(app.top().style.getPropertyValue('--btw-motion-origin-y'), `${(504 - 80) / 860 * 100}%`);
   assert.equal(incoming.frames.at(-1).translate, '0px 0px');
-  assert.ok(incoming.options.duration >= 160 && incoming.options.duration <= 240);
+  assert.equal(Number(incoming.frames.at(-1).scale), 1);
+  assert.ok(incoming.options.duration >= 250 && incoming.options.duration <= 330);
   await app.settle();
   assert.equal(app.top().hasAttribute('data-btw-motion'), false);
+  await app.close();
+  await app.settle();
+  document.getSelection().addRange(range);
+  await app.draft(app.source);
+  document.getSelection().removeAllRanges();
+  assert.equal(app.top().dataset.btwMotion, 'source-enter');
   await app.close();
   await app.settle();
   await app.open();
   const distant = app.animations.findLast((animation) => animation.target === app.top());
   const [x, y] = distant.frames[0].translate.split(' ').map(parseFloat);
   assert.ok(Math.hypot(x, y) <= 24.001, '远处来源的二维位移总长度不可超过24px（容许浮点误差）');
+});
+
+test('从子卡解释选中文字仅展开新卡，父卡和遮罩在下面保持静止', async (t) => {
+  const app = await mount(t, { native: true });
+  await app.open();
+  await app.settle();
+  const parent = app.top();
+  const anchor = parent.querySelector('[data-render-native]');
+  const backdrop = app.overlay().querySelector('.dsh-btw-backdrop');
+  const count = app.animations.length;
+  await app.draft(anchor, true);
+  assert.equal(app.requests.at(-1).action, 'explain-native');
+  assert.equal(parent.hasAttribute('inert'), true);
+  assert.equal(parent.hasAttribute('data-btw-motion-underlay'), true);
+  assert.equal(app.overlay().querySelector('.dsh-btw-backdrop'), backdrop);
+  assert.equal(app.top().dataset.btwMotion, 'source-enter');
+  assert.equal(app.overlay().hasAttribute('data-btw-deck-swap'), false);
+  assert.deepEqual(app.animations.slice(count).map(({ target }) => target), [app.top()]);
+  await app.settle();
+  assert.equal(parent.hasAttribute('data-btw-motion-underlay'), false);
+});
+
+test('白板节点打开后仅在整叠卡片退场时刷新并恢复焦点', async (t) => {
+  let updates = 0;
+  let finishRead;
+  const initialRead = new Promise((resolve) => { finishRead = resolve; });
+  const app = await mount(t, { initialRead, onBoardClose: () => updates++ });
+  await app.open('parent', 'board');
+  assert.equal(app.top().dataset.btwMotion, 'source-enter');
+  assert.equal(app.overlay().querySelector('.dsh-btw-map'), null);
+  assert.equal(app.overlay().hasAttribute('data-btw-has-map'), true, '读取卡片树期间就留出导航宽度');
+  assert.equal(updates, 0);
+  await act(async () => finishRead());
+  await app.settle();
+  await app.draft(app.top().querySelector('[data-btw-answer]'));
+  await app.close();
+  await app.settle();
+  assert.equal(updates, 0);
+  await app.close();
+  assert.equal(updates, 0, '退场中不抢先刷新底下的白板');
+  await app.settle();
+  assert.equal(updates, 1);
+  assert.equal(document.activeElement, app.source);
+  await app.open('second');
+  await app.close();
+  await app.settle();
+  assert.equal(updates, 1, '普通入口退出不刷新白板');
 });
 
 test('切换时前卡向左绕到后面，后卡推进，遮罩始终不动', async (t) => {
@@ -524,7 +581,7 @@ test('子卡进入被返回打断时复用父卡并保留草稿与阅读位置',
 for (const mode of ['reduced', 'unsupported']) {
   test(`${mode}环境同步开关且不创建动画或遗留退出层`, async (t) => {
     const app = await mount(t, { reduced: mode === 'reduced', support: mode !== 'unsupported' });
-    await app.open();
+    await app.draft(app.source);
     assert.ok(app.top());
     await app.close();
     assert.equal(app.overlay(), null);

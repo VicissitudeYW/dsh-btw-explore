@@ -5,7 +5,8 @@
   transform-origin: var(--btw-motion-origin-x, 50%) var(--btw-motion-origin-y, 50%);
   will-change: translate, scale, opacity;
 }
-.dsh-btw-overlay:not([data-btw-closing]) .dsh-btw-page:not([data-btw-top], [data-btw-deck-face]) { visibility: hidden; }
+.dsh-btw-overlay:not([data-btw-closing]) .dsh-btw-page:not([data-btw-top], [data-btw-deck-face], [data-btw-motion-underlay]) { visibility: hidden; }
+.dsh-btw-overlay .dsh-btw-page[data-btw-motion-underlay] { z-index: 1; pointer-events: none; }
 .dsh-btw-overlay .dsh-btw-page[data-btw-leaving] {
   z-index: 1;
   transform: none;

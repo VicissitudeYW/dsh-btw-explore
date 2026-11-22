@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createExplorer } from '../lib/service.js';
 import { createStore } from '../lib/store.js';
+import { createHandler } from '../lib/index.js';
 
 async function waitFor(callback) {
   for (let attempt = 0; attempt < 150; attempt++) {
@@ -50,6 +51,38 @@ const request = (app, action, body, sessionId = 'session-a') => app.mutate(sessi
 const detail = (app, id) => app.read('session-a', id).card;
 const done = (app, cardId) => waitFor(() => detail(app, cardId)?.status === 'done' && detail(app, cardId));
 const newCard = (fields = {}) => ({ cardId: randomUUID(), turnId: randomUUID(), question: 'first Q', relation: 'root', ...fields });
+const getWhiteboard = async (app, sessionId = 'session-a') => {
+  const url = new URL('http://localhost/api/dsh-btw-explore');
+  url.searchParams.set('sessionId', sessionId);
+  url.searchParams.set('previews', '1');
+  const response = await createHandler(app)(new Request(url));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  return response.json();
+};
+
+test('the whiteboard adds saved legacy quotes and assistant excerpts without changing ordinary reads', async (t) => {
+  const { app, inputs } = harness(t, async function* () {
+    yield { type: 'text-delta', text: `   模型回答\n\n${'正'.repeat(260)} hidden long tail` };
+    yield { type: 'finish', reason: { kind: 'stop' } };
+  });
+  const saved = newCard({ cardId: 'legacy-saved', quote: '来自原对话的节选', question: '不应出现在预览里的提问' });
+  const draft = newCard({ cardId: 'legacy-draft', preview: true });
+  await request(app, 'create', saved);
+  await request(app, 'create', draft);
+  await done(app, saved.cardId);
+  await done(app, draft.cardId);
+
+  const board = await getWhiteboard(app);
+  assert.deepEqual(board.cards.map((card) => [card.id, card.source.quote]), [['legacy-saved', '来自原对话的节选']]);
+  assert.deepEqual(Object.keys(board.previews), ['legacy-saved']);
+  assert.match(board.previews['legacy-saved'], /^模型回答 正+\n?…$/);
+  assert.ok(board.previews['legacy-saved'].length <= 220);
+  assert.deepEqual(await getWhiteboard(app, 'session-b'), { cards: [], previews: {} });
+  assert.equal(inputs.length, 2, 'reading the board must not generate any new reply');
+  assert.equal(app.read('session-a').cards.find((card) => card.id === saved.cardId).source.quote, undefined);
+  assert.deepEqual(Object.keys(app.read('session-a')), ['cards', 'card']);
+});
 
 test('preview, saved tree, bounded branches and transcript survive reopening', async (t) => {
   const { app, open, inputs, events } = harness(t, async function* (options) {
@@ -136,7 +169,7 @@ function deferred() {
   return { promise, resolve };
 }
 
-function nativeHarness(t, { beforeCreate = async () => {}, resolveAgent, prompt, clock } = {}) {
+function nativeHarness(t, { beforeCreate = async () => {}, resolveAgent, prompt, clock, observe } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'dsh-explore-native-'));
   const database = join(directory, 'test.sqlite');
   const events = [{ type: 'turn/start', seq: 0, data: { turn: 1 } },
@@ -149,7 +182,7 @@ function nativeHarness(t, { beforeCreate = async () => {}, resolveAgent, prompt,
   const apps = [];
   const ctx = {
     sessions, agents,
-    sessionQuery: { async observeSession() { throw new Error('missing'); } },
+    sessionQuery: { observeSession: observe ?? (async () => { throw new Error('missing'); }) },
     sessionController: { prompt, ...(resolveAgent ? { resolveAgent: (id) => resolveAgent(id, { sessions, agents }) } : {}), async create(options) {
       creates.push(options);
       await beforeCreate(options, creates.length);
@@ -173,6 +206,41 @@ function nativeHarness(t, { beforeCreate = async () => {}, resolveAgent, prompt,
   });
   return { app: open(), open, database, sessions, agents, creates };
 }
+
+test('native board previews include only durable assistant answer text and tolerate unavailable cards', async (t) => {
+  const observed = [];
+  const disposed = [];
+  const cold = new Map();
+  const { app, sessions, creates } = nativeHarness(t, { async observe(id, options) {
+    observed.push([id, options.projectionMode]);
+    if (!cold.has(id)) throw new Error('missing');
+    return { events: cold.get(id), [Symbol.dispose]: () => disposed.push(id) };
+  } });
+  const answer = await request(app, 'open-native', { cardId: 'native-answer', quote: '原句' });
+  const missing = await request(app, 'open-native', { cardId: 'native-unavailable' });
+  const blank = await request(app, 'open-native', { cardId: 'native-blank' });
+  const text = (value) => ({ type: 'text', text: value });
+  cold.set(answer.nativeSessionId, [
+    { type: 'assistant/message', surfaceOp: 'append', data: { message: { content: [text('较早回答')] } } },
+    { type: 'assistant/message', surfaceOp: 'append', data: { message: { content: [
+      { type: 'reasoning', text: '隐藏推理' }, text('可见的模型回答'), { type: 'tool-call', input: '隐藏工具参数' }, text('第二句') ] } } },
+    { type: 'tool/result', data: { message: { content: [text('隐藏工具结果')] } } },
+    { type: 'user/message', data: { content: [text('用户的下一问')] } },
+    { type: 'assistant/message', data: { message: { content: [{ type: 'reasoning', text: '尚无回答' }] } } },
+  ]);
+  sessions.delete(answer.nativeSessionId);
+  sessions.delete(missing.nativeSessionId);
+  assert.equal(app.read('session-a').cards.length, 3);
+  assert.deepEqual(observed, []);
+
+  const board = await getWhiteboard(app);
+  assert.deepEqual(board.previews, { 'native-answer': '可见的模型回答 第二句' });
+  assert.deepEqual(new Set(board.cards.map((card) => card.id)), new Set([answer.cardId, missing.cardId, blank.cardId]));
+  assert.deepEqual(new Set(observed.map(([id]) => id)), new Set([answer.nativeSessionId, missing.nativeSessionId]));
+  assert.ok(observed.every(([, projectionMode]) => projectionMode === 'none'));
+  assert.deepEqual(disposed, [answer.nativeSessionId]);
+  assert.equal(creates.length, 3);
+});
 
 test('explaining an empty quote card submits one native first turn, even across concurrent opens', async (t) => {
   const entered = deferred();

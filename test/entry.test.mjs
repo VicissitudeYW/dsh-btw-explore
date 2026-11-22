@@ -15,7 +15,7 @@ const read = (file) => fs.readFileSync(new URL(`../src/${file}.js`, import.meta.
 const source = [read('view'), 'ExploreView = mockExploreView;', read('drag'), read('pages'), read('navigation'), read('native'), read('entry')].join('\n');
 const overlay = () => document.querySelector('[role="dialog"][aria-modal="true"]');
 
-async function setup(t, { cards, portal, fetchRequest, sessionService } = {}) {
+async function setup(t, { cards, portal, fetchRequest, fetchRead, sessionService, styles, openView } = {}) {
   document.body.innerHTML = '<div id="shell"><div data-slot="conversation.header"><header id="header"><div id="entry"></div><div data-conversation-tabs><button role="tab">对话</button><button role="tab">探索</button></div></header></div></div><div id="detail"></div>';
   const slots = new Map();
   const disposers = [];
@@ -23,26 +23,34 @@ async function setup(t, { cards, portal, fetchRequest, sessionService } = {}) {
   let openedCard;
   let request;
   const reads = [];
-  const plugin = Function('React', 'h', 'mockExploreView', 'EXPLORE_CSS', 'require', 'fetch', source)(
+  const Board = ({ cards, previews, onOpen, onReturnChat }) => React.createElement('div', null,
+    React.createElement('button', { onClick: onReturnChat }, '主聊天'),
+    cards.map((card) => React.createElement('button', { key: card.id, onClick: (event) => onOpen(card, event.currentTarget) },
+      `${card.source?.quote}: ${previews[card.id]}`)));
+  const plugin = Function('React', 'h', 'mockExploreView', 'EXPLORE_CSS', 'require', 'fetch', 'ExploreWhiteboard', 'recordRequest',
+    `recordRequest(explorerRequest);\n${source}`)(
     React, React.createElement, (props) => {
-      request = props.request;
       lastDraft = props.initialDraft;
       if (props.onClosePage) openedCard = props.initialCardId;
       return props.onClosePage ? React.createElement('button', { onClick: props.onClosePage }, '返回主聊天') : null;
-    }, '', (id) => {
+    }, styles ?? '', (id) => {
       if (id === 'react-dom' && portal) return { createPortal };
       throw new Error('module unavailable');
     }, async (path, options) => {
-      reads.push(new URL(path, 'https://test.invalid').searchParams.get('sessionId'));
+      const query = new URL(path, 'https://test.invalid').searchParams;
       if (fetchRequest && options.method === 'POST') return fetchRequest(JSON.parse(options.body));
-      return { ok: true, json: async () => ({ cards: cards ?? [] }) };
-    },
+      if (!query.has('previews')) reads.push(query.get('sessionId'));
+      return { ok: true, json: async () => fetchRead ? fetchRead(query) : { cards: cards ?? [] } };
+    }, Board, (value) => { request = value; },
   );
   plugin.apply({
     get(name) {
       if (name === 'slots') return {
         inject: (_name, install) => install(),
-        register: (options, Component) => { slots.set(options.name, { options, Component }); },
+        register: (options, Component) => {
+          if (options.name === 'conversation.chat.user.before') assert.equal(typeof options.select, 'function');
+          slots.set(options.name, { options, Component });
+        },
       };
       if (name === 'sessions') return sessionService ?? { binding: () => undefined };
       if (name === 'uiConversation') return { interactions: { register: () => () => {} }, binding: () => ({ activate() {} }) };
@@ -55,7 +63,7 @@ async function setup(t, { cards, portal, fetchRequest, sessionService } = {}) {
   const view = slots.get('conversation.view');
   await act(async () => {
     root.render(React.createElement(headerEntry.Component, headerEntry.options.inject('session-1')));
-    detail.render(React.createElement(view.Component, { sessionId: 'session-1' }));
+    detail.render(React.createElement(view.Component, { sessionId: 'session-1', openView }));
   });
   t.after(async () => {
     await act(async () => { root.unmount(); detail.unmount(); });
@@ -67,6 +75,28 @@ async function setup(t, { cards, portal, fetchRequest, sessionService } = {}) {
   return { slots, draft: () => lastDraft, navigations: () => navigations, openedCard: () => openedCard, reads,
     request: (...args) => request(...args) };
 }
+
+test('only the automatic explanation bubble is hidden in the embedded conversation', async (t) => {
+  const app = await setup(t, { styles: fs.readFileSync(new URL('../src/explore.css', import.meta.url), 'utf8') });
+  const { Component, options } = app.slots.get('conversation.chat.user.before');
+  const prompt = '请结合原对话，用两三句话解释我选中的内容。只解释文字，不调用工具。';
+  const automatic = { kind: 'user', rpcId: 'btw-explore:explain:session-btw-explore-abcd' };
+  const manual = { kind: 'user', rpcId: 'manual-message' };
+  const row = (id, source, text, kind = 'user') => React.createElement('div', { id, 'data-chat-flow-kind': kind },
+    options.select({ source, kind }) !== null ? React.createElement(Component, { source, kind }) : null,
+    React.createElement('p', null, text));
+  const area = document.body.appendChild(document.createElement('div'));
+  const root = createRoot(area);
+  t.after(async () => { await act(async () => root.unmount()); area.remove(); });
+  await act(async () => root.render(React.createElement(React.Fragment, null,
+    row('main-chat', automatic, prompt),
+    React.createElement('div', { className: 'dsh-btw-native' },
+      row('auto', automatic, prompt), row('manual', manual, prompt), row('answer', undefined, '模型回答', 'assistant-step')),
+  )));
+  const display = (id) => window.getComputedStyle(document.getElementById(id)).display;
+  assert.equal(display('auto'), 'none');
+  for (const id of ['manual', 'answer', 'main-chat']) assert.notEqual(display(id), 'none', `${id} must stay visible`);
+});
 
 test('Explain uses the same native card when the running host does not recognize explain-native', async (t) => {
   const card = { cardId: 'retained-card', nativeSessionId: 'session-btw-explore-retained' };
@@ -130,6 +160,31 @@ test('the tree is a conversation tab with no duplicate header or assistant actio
   assert.equal(app.navigations(), 1);
   assert.equal(overlay(), null);
   assert.equal(app.slots.has('conversation.chat.assistant-actions'), false);
+});
+
+test('the Explore tab launches a saved native card and refreshes its summary after dismissal', async (t) => {
+  const reads = [];
+  const openedViews = [];
+  const app = await setup(t, {
+    portal: true, openView: (id) => openedViews.push(id),
+    fetchRead(query) {
+      if (query.get('previews') !== '1') return { cards: [] };
+      reads.push(query.get('sessionId'));
+      return { cards: [{ id: 'saved', source: { quote: '划词内容' } }], previews: { saved: '模型回答' } };
+    },
+  });
+  const node = [...document.querySelectorAll('#detail button')].find((button) => button.textContent === '划词内容: 模型回答');
+  assert.ok(node, 'whiteboard reads the previews for the active session');
+  assert.deepEqual(reads, ['session-1']);
+  await act(async () => { node.focus(); node.click(); });
+  assert.ok(overlay());
+  assert.equal(app.openedCard(), 'saved');
+  await act(async () => overlay().querySelector('button').click());
+  assert.equal(overlay(), null);
+  assert.equal(document.activeElement, node);
+  assert.deepEqual(reads, ['session-1', 'session-1']);
+  await act(async () => document.querySelector('#detail button').click());
+  assert.deepEqual(openedViews, ['chat']);
 });
 
 test('main chat left edge reveals a saved card without an open dialog', async (t) => {

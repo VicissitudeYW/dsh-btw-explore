@@ -1,11 +1,12 @@
 const EXPLORE_PATH = '/api/dsh-btw-explore';
 const EXPLORE_VIEW = 'dsh-btw-explore';
 const explorerViewOpeners = new Map();
+const explorerBoardRefreshers = new Map();
 let sessionsService;
 let conversationService;
 
 async function explorerRequest(sessionId, options = {}) {
-  const { action, body, cardId, signal } = options;
+  const { action, body, cardId, previews, signal } = options;
   let url = EXPLORE_PATH;
   const init = { credentials: 'same-origin', cache: 'no-store', signal };
   if (action) {
@@ -15,6 +16,7 @@ async function explorerRequest(sessionId, options = {}) {
   } else {
     const query = new URLSearchParams({ sessionId });
     if (cardId) query.set('cardId', cardId);
+    if (previews) query.set('previews', '1');
     url += `?${query}`;
   }
   const response = await fetch(url, init);
@@ -87,8 +89,8 @@ function ExplorerMarkdown(props) {
   }));
 }
 
-function NativeExplorer({ sessionId, openView, renderFactorySlot }) {
-  const [notice, setNotice] = React.useState('');
+function NativeExplorer({ sessionId, openView }) {
+  const [board, setBoard] = React.useState(null);
   React.useLayoutEffect(() => {
     if (typeof openView !== 'function') return;
     explorerViewOpeners.set(sessionId, openView);
@@ -96,24 +98,47 @@ function NativeExplorer({ sessionId, openView, renderFactorySlot }) {
       if (explorerViewOpeners.get(sessionId) === openView) explorerViewOpeners.delete(sessionId);
     };
   }, [sessionId, openView]);
-  const onChat = (source) => {
-    if (typeof openView !== 'function') { setNotice('请从会话上方切换到聊天。'); return; }
-    const turn = source?.turn;
-    const scroll = () => {
-      if (!Number.isSafeInteger(turn)) return;
-      const row = document.querySelector(`[data-chat-turn="${turn}"][data-chat-flow-kind]`);
-      row?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    };
-    if (Number.isSafeInteger(source?.boundarySeq)) {
-      void sessionsService?.binding(sessionId)?.session?.loadThrough(source.boundarySeq).catch(() => {});
+  React.useEffect(() => {
+    let request;
+    let poll;
+    async function refresh() {
+      clearTimeout(poll);
+      request?.abort();
+      const { signal } = (request = new AbortController());
+      setBoard((previous) => ({ ...(previous?.sessionId === sessionId ? previous : null), sessionId, loading: true, error: '' }));
+      try {
+        const { cards, previews } = await explorerRequest(sessionId, { previews: true, signal });
+        if (signal.aborted) return;
+        setBoard({ sessionId, cards, previews, loading: false, error: previews ? '' : '请重启 DSH 后查看卡片预览。' });
+        if (previews && !document.hidden && cards.some((card) => card.status === 'running')) poll = setTimeout(refresh, 3000);
+      } catch {
+        if (!signal.aborted) setBoard((previous) => ({ ...previous, loading: false, error: '暂时无法加载卡片，请重试。' }));
+      }
     }
-    openView('chat');
-    setTimeout(scroll, 150);
-  };
-  return h(React.Fragment, null,
-    notice ? h('div', { role: 'status', className: 'dsh-btw-error' }, notice) : null,
-    h(ExploreView, { key: sessionId, sessionId, onChat, request: explorerRequest, Markdown: ExplorerMarkdown,
-      nativeCards: typeof renderFactorySlot === 'function' }));
+    let listeners = exploreChangeListeners.get(sessionId);
+    if (!listeners) exploreChangeListeners.set(sessionId, listeners = new Set());
+    listeners.add(refresh);
+    explorerBoardRefreshers.set(sessionId, refresh);
+    const onVisible = () => { if (!document.hidden) void refresh(); };
+    document.addEventListener('visibilitychange', onVisible);
+    void refresh();
+    return () => {
+      request?.abort();
+      clearTimeout(poll);
+      if (explorerBoardRefreshers.get(sessionId) === refresh) explorerBoardRefreshers.delete(sessionId);
+      listeners.delete(refresh);
+      if (!listeners.size) exploreChangeListeners.delete(sessionId);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [sessionId]);
+  const current = board?.sessionId === sessionId ? board : null;
+  return h(ExploreWhiteboard, {
+    key: sessionId, cards: current?.cards ?? EXPLORE_EMPTY_CARDS, previews: current?.previews ?? {},
+    loading: current?.loading ?? true, error: current?.error,
+    onOpen: (card, opener) => openSavedExplorerPage(sessionId, card.id, opener, 'board'),
+    onReturnChat: typeof openView === 'function' ? () => openView('chat') : undefined,
+    onRetry: () => explorerBoardRefreshers.get(sessionId)?.(),
+  });
 }
 
 // Text interactions are first-claim keyed surfaces in rc.5. If native quotes
@@ -178,13 +203,14 @@ function supplementSelection(sessionId) {
 function ExplorerHost({ sessionId, renderFactorySlot }) {
   const owner = React.useRef(null);
   const returnToChat = React.useCallback(() => explorerViewOpeners.get(sessionId)?.('chat'), [sessionId]);
+  const refreshBoard = React.useCallback(() => explorerBoardRefreshers.get(sessionId)?.(), [sessionId]);
   React.useEffect(() => supplementSelection(sessionId), [sessionId]);
   return h(React.Fragment, null,
     h('span', { ref: owner, hidden: true, style: { display: 'none' } }),
     explorerPortal && h(ExploreChatNavigation, { key: `chat-map:${sessionId}`, sessionId,
       ownerRef: owner, request: explorerRequest, portal: explorerPortal }),
     h(ExplorePages, { key: sessionId, sessionId, request: explorerRequest, Markdown: ExplorerMarkdown,
-      portal: explorerPortal, ownerRef: owner, onReturnChat: returnToChat,
+      portal: explorerPortal, ownerRef: owner, onReturnChat: returnToChat, onBoardClose: refreshBoard,
       renderNative: typeof renderFactorySlot !== 'function' ? undefined : (card, ownerSessionId) =>
         renderFactorySlot(EXPLORE_NATIVE_FACTORY, { ownerSessionId, cardId: card.id, nativeSessionId: card.nativeSessionId }),
     }),
@@ -243,5 +269,8 @@ return {
       name: 'conversation.chat.text-interaction', key: EXPLORE_VIEW, id: EXPLORE_VIEW,
       inject: (sessionId) => ({ sessionId }),
     }, AskSelection));
+    slots.inject('conversation.chat.user.before', () => slots.register({
+      name: 'conversation.chat.user.before', id: EXPLORE_VIEW, select: selectExploreExplanation,
+    }, ExploreExplanationMarker));
   },
 };

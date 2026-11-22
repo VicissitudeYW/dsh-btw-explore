@@ -468,6 +468,9 @@ try {
     }
     const explanationQuery = `/api/dsh-btw-explore?sessionId=${sessionId}&cardId=${explanation.cardId}`;
     assert.equal((await json(explanationQuery)).card.title, explainQuote);
+    const board = await json(`/api/dsh-btw-explore?sessionId=${sessionId}&previews=1`);
+    assert.equal(board.cards.find((card) => card.id === explanation.cardId)?.source?.quote, explainQuote);
+    assert.equal(board.previews[explanation.cardId], explanationAnswer);
     assert.deepEqual(await rpc('session/events', { address: explanationAddress, maxMessages: 100 }), explanationSnapshot);
     pass('Explain sends a real first native turn with the quote; Explore and Explain reuse the same card');
 

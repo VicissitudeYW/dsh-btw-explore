@@ -49,7 +49,7 @@ function restoreExplorerPage(page) {
   if (page.scroller?.isConnected) page.scroller.scrollTop = page.scrollTop;
 }
 
-function ExplorerPage({ sessionId, page, isTop, isLeaving, motion, deckFace, isNested, titleId, homeLabel, request, Markdown, renderNative,
+function ExplorerPage({ sessionId, page, isTop, isLeaving, motion, deckFace, underlay, isNested, titleId, homeLabel, request, Markdown, renderNative,
   dismiss, bindCard, navigate, onReadCards }) {
   const frame = React.useRef(null);
   const reportCards = React.useCallback((cards) => {
@@ -76,6 +76,7 @@ function ExplorerPage({ sessionId, page, isTop, isLeaving, motion, deckFace, isN
     'data-btw-motion': motion,
     'data-btw-motion-surface': motion ? 'frame' : undefined,
     'data-btw-deck-face': deckFace,
+    'data-btw-motion-underlay': underlay ? '' : undefined,
     'aria-hidden': !isTop ? true : undefined,
   }, h('div', { className: 'dsh-btw-page-content' }, h(ExploreView, {
     sessionId, request, Markdown, renderNative,
@@ -157,6 +158,11 @@ function explorerNavigationMotion(previous, next, graph) {
 }
 
 const explorerSwapDuration = 400;
+const explorerSourceDuration = 285;
+
+function hasExplorerOpeningSource(page) {
+  return page?.origin === 'board' || Boolean(page?.draft?.quote?.trim());
+}
 
 function explorerDeckKeyframes(face) {
   const ease = 'cubic-bezier(.22, .78, .26, 1)';
@@ -179,7 +185,8 @@ function explorerPageKeyframes(element, page, kind) {
   const bounds = element.getBoundingClientRect();
   const dx = page.motionSource ? page.motionSource.x - bounds.left - bounds.width / 2 : 0;
   const dy = page.motionSource ? page.motionSource.y - bounds.top - bounds.height / 2 : 12;
-  const ratio = Math.min(1, 24 / (Math.hypot(dx, dy) || 1));
+  const sourced = kind === 'source-enter';
+  const ratio = Math.min(1, (sourced ? 60 : 24) / (Math.hypot(dx, dy) || 1));
   const sourceX = dx * ratio;
   const sourceY = dy * ratio;
   element.style.setProperty('--btw-motion-origin-x', `${bounds.width && page.motionSource
@@ -188,13 +195,14 @@ function explorerPageKeyframes(element, page, kind) {
     ? Math.max(0, Math.min(100, (page.motionSource.y - bounds.top) / bounds.height * 100)) : 50}%`);
   const leaving = kind === 'exit';
   const rest = { opacity: 1, translate: '0px 0px', scale: '1' };
-  const displaced = { opacity: leaving ? 0 : 0.68, translate: `${sourceX}px ${sourceY}px`, scale: '0.985' };
+  const displaced = { opacity: leaving ? 0 : sourced ? 0.2 : 0.68,
+    translate: `${sourceX}px ${sourceY}px`, scale: sourced ? '0.74' : '0.985' };
   return { frames: leaving ? [rest, displaced] : [displaced, rest],
-    duration: leaving ? 150 : 210 };
+    duration: leaving ? 150 : sourced ? explorerSourceDuration : 210 };
 }
 
 // This lives in the session header, so opening a page never replaces the chat or tree view.
-function ExplorePages({ sessionId, request, Markdown, renderNative, portal, ownerRef, onReturnChat }) {
+function ExplorePages({ sessionId, request, Markdown, renderNative, portal, ownerRef, onReturnChat, onBoardClose }) {
   const [deck, setDeck] = React.useState({ pages: [], leaving: [], revision: 0, motion: null, restore: null });
   const { pages, leaving, motion } = deck;
   const [cards, setCards] = React.useState(EXPLORE_EMPTY_CARDS);
@@ -203,9 +211,11 @@ function ExplorePages({ sessionId, request, Markdown, renderNative, portal, owne
   const committedTop = React.useRef(null);
   const focusedPage = React.useRef(null);
   const restoredRevision = React.useRef(-1);
+  const closedBoardRevision = React.useRef(-1);
   const titleId = React.useId();
   React.useLayoutEffect(() => {
-    const open = (page) => setDeck((previous) => transitionExplorerPages(previous, [...previous.pages, page], 'enter', null, committedTop.current));
+    const open = (page) => setDeck((previous) => transitionExplorerPages(previous, [...previous.pages, page],
+      hasExplorerOpeningSource(page) ? 'source-enter' : 'enter', null, committedTop.current));
     explorerPageHosts.set(sessionId, open);
     return () => {
       if (explorerPageHosts.get(sessionId) === open) explorerPageHosts.delete(sessionId);
@@ -217,7 +227,8 @@ function ExplorePages({ sessionId, request, Markdown, renderNative, portal, owne
 
   const opened = pages.length > 0;
   const visible = opened || leaving.length > 0;
-  const swapping = Boolean(motion?.incomingKey && motion?.outgoingKey);
+  const sourceEntry = motion?.kind === 'source-enter';
+  const swapping = !sourceEntry && Boolean(motion?.incomingKey && motion?.outgoingKey);
   useExplorerDeckLayout(overlay, ownerRef, visible, sessionId);
   React.useLayoutEffect(() => {
     if (!visible || !portal) return;
@@ -248,7 +259,11 @@ function ExplorePages({ sessionId, request, Markdown, renderNative, portal, owne
       restoredRevision.current = deck.revision;
       restoreExplorerPage(deck.restore);
     }
-  }, [deck, opened, visible, onReturnChat]);
+    if (!visible && deck.homeOrigin === 'board' && closedBoardRevision.current !== deck.revision) {
+      closedBoardRevision.current = deck.revision;
+      onBoardClose?.();
+    }
+  }, [deck, opened, visible, onReturnChat, onBoardClose]);
   React.useLayoutEffect(() => {
     if (!visible) setCards(EXPLORE_EMPTY_CARDS);
   }, [visible]);
@@ -289,7 +304,8 @@ function ExplorePages({ sessionId, request, Markdown, renderNative, portal, owne
     // finished rejects on cancel; a stale animation can never settle a new deck.
     Promise.allSettled(animations.map((animation) => animation.finished)).then(finish);
     // A browser or suspended timeline must not leave the foreground inert forever.
-    timeout = setTimeout(finish, (swapping ? explorerSwapDuration : motion.kind === 'enter' ? 210 : 180) + 80);
+    timeout = setTimeout(finish, (swapping ? explorerSwapDuration
+      : sourceEntry ? explorerSourceDuration : motion.kind === 'enter' ? 210 : 180) + 80);
     return () => {
       disposed = true;
       clearTimeout(timeout);
@@ -353,7 +369,8 @@ function ExplorePages({ sessionId, request, Markdown, renderNative, portal, owne
     'aria-labelledby': opened ? titleId : undefined, 'aria-label': opened ? undefined : homeLabel,
     'data-btw-motion': motion?.kind, 'data-btw-closing': !opened ? '' : undefined,
     'data-btw-deck-swap': swapping ? '' : undefined,
-    'data-btw-has-map': cards.length ? '' : undefined,
+    // Reserve the minimum rail space before an asynchronous card list arrives.
+    'data-btw-has-map': cards.length || hasExplorerOpeningSource((opened ? pages : leaving)[0]) ? '' : undefined,
     style: cards.length ? { '--btw-map-content-width': `${graph.fitWidth}px` } : undefined,
   },
     h('div', { className: 'dsh-btw-backdrop', 'aria-hidden': true,
@@ -362,11 +379,12 @@ function ExplorePages({ sessionId, request, Markdown, renderNative, portal, owne
       const isLeaving = leaving.includes(page);
       const incoming = page.key === motion?.incomingKey;
       const outgoing = page.key === motion?.outgoingKey;
-      const animated = incoming || outgoing;
+      const animated = incoming || (outgoing && !sourceEntry);
       return h(ExplorerPage, {
         key: page.key, sessionId, page, isTop: page === pages.at(-1), isLeaving,
         motion: animated ? motion.kind : undefined,
         deckFace: swapping && animated ? (incoming ? 'incoming' : 'outgoing') : undefined,
+        underlay: sourceEntry && outgoing && !incoming,
         isNested: isLeaving ? page.leavingNested : pages.indexOf(page) > 0, titleId, homeLabel,
         request, Markdown, renderNative, dismiss, bindCard, navigate, onReadCards: setCards,
       });

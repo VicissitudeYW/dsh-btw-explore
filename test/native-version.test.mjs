@@ -63,6 +63,23 @@ test('selecting an edited native version persists the same card and preserves it
   assert.match(reopened.nativeContext('session-edited'), /the sky-source reference/);
 });
 
+test('the whiteboard previews the version currently bound to a native card', async (t) => {
+  const f = await fixture(t);
+  const answer = (text, surfaceOp = 'append') => ({ type: 'assistant/message', surfaceOp,
+    data: { message: { content: [{ type: 'text', text }] } } });
+  const original = f.session(f.original, undefined, f.directory, { events: [answer('original answer')] });
+  const alternateId = 'preview-alternate';
+  f.session(alternateId, original.id, f.directory, { events: [
+    { type: 'message-toolbar/version', seq: 0, data: { sessionId: alternateId, schemaVersion: 2,
+      inverse: { kind: 'restore-version', sessionId: f.original } } },
+    answer('bound version answer'),
+    answer('internal surface replacement', { kind: 'replace' }),
+  ] });
+  assert.deepEqual((await f.app.readWhiteboard('main')).previews, { [f.cardId]: 'original answer' });
+  await f.bind(f.original, alternateId);
+  assert.deepEqual((await f.app.readWhiteboard('main')).previews, { [f.cardId]: 'bound version answer' });
+});
+
 test('native version selection rejects unrelated sessions and a changed workspace', async (t) => {
   const f = await fixture(t);
   f.session('session-unrelated');

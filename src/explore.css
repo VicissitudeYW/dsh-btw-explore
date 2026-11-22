@@ -214,6 +214,7 @@ button.dsh-btw-selection-button:focus-visible {
 .dsh-btw-explore-page .dsh-btw-head-path > .dsh-btw-button { min-height: 36px; }
 
 .dsh-btw-native { min-width: 0; min-height: 0; display: flex; flex: 1; }
+.dsh-btw-native [data-chat-flow-kind="user"]:has([data-btw-explanation-prompt]) { display: none; }
 .dsh-btw-native-source { padding: 10px 16px 0; flex-shrink: 0; }
 .dsh-btw-native-source:empty { display: none; }
 .dsh-btw-native-source .dsh-btw-source { max-height: 114px; overflow: auto; margin-bottom: 4px; }

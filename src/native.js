@@ -1,5 +1,18 @@
 const EXPLORE_NATIVE_FACTORY = 'dsh-btw-explore/native';
 const EXPLORE_NATIVE_CONTENT = 'dsh-btw-explore.native.content';
+const EXPLORE_EXPLANATION_REQUEST_PREFIX = 'btw-explore:explain:';
+
+function selectExploreExplanation({ source, kind }) {
+  if (kind !== 'user' || source?.kind !== 'user'
+    || typeof source.rpcId !== 'string'
+    || !source.rpcId.startsWith(`${EXPLORE_EXPLANATION_REQUEST_PREFIX}session-btw-explore-`)) return null;
+  // Match the persisted request, including when a native answer version inherits it.
+  return true;
+}
+
+function ExploreExplanationMarker() {
+  return h('span', { hidden: true, 'data-btw-explanation-prompt': '' });
+}
 
 async function explainWithNativeSession(nativeSessionId, signal) {
   const retain = () => sessionsService.retain(nativeSessionId, { source: 'btwExplore', signal });
@@ -20,7 +33,7 @@ async function explainWithNativeSession(nativeSessionId, signal) {
     if (state.blank !== true || state.running || state.awaitingFirstTurn || state.pendingSubmissions?.length) return;
     // Same host receipt as the current backend, even across renderer and host upgrades.
     const result = await session.prompt([{ type: 'text', text: EXPLORE_EXPLANATION_QUESTION }], 'queue', signal,
-      `btw-explore:explain:${nativeSessionId}`);
+      `${EXPLORE_EXPLANATION_REQUEST_PREFIX}${nativeSessionId}`);
     if (!result?.ok) throw new Error('暂时无法发起解释，请重试。');
   } finally { retained?.release(); }
 }
