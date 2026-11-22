@@ -21,7 +21,16 @@ async function explorerRequest(sessionId, options = {}) {
   let result;
   try { result = await response.json(); }
   catch { throw new Error('探索服务暂不可用，请重新连接 DSH。'); }
-  if (!response.ok) throw new Error(result.error || '探索请求失败，请稍后重试。');
+  // A linked plugin can ship a new renderer while the running host still has the old action table.
+  if (action === 'explain-native' && response.status === 400 && result?.error === '未知卡片操作。') {
+    const card = await explorerRequest(sessionId, { action: 'open-native', body, signal });
+    if (typeof card?.nativeSessionId !== 'string' || !card.nativeSessionId || card.nativeSessionId === sessionId) {
+      throw new Error('无法确认子卡的对话，请重试。');
+    }
+    await explainWithNativeSession(card.nativeSessionId, signal);
+    return card;
+  }
+  if (!response.ok) throw new Error(result?.error || '探索请求失败，请稍后重试。');
   return result;
 }
 

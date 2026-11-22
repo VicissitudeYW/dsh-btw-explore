@@ -15,23 +15,26 @@ const read = (file) => fs.readFileSync(new URL(`../src/${file}.js`, import.meta.
 const source = [read('view'), 'ExploreView = mockExploreView;', read('drag'), read('pages'), read('navigation'), read('native'), read('entry')].join('\n');
 const overlay = () => document.querySelector('[role="dialog"][aria-modal="true"]');
 
-async function setup(t, { cards, portal } = {}) {
+async function setup(t, { cards, portal, fetchRequest, sessionService } = {}) {
   document.body.innerHTML = '<div id="shell"><div data-slot="conversation.header"><header id="header"><div id="entry"></div><div data-conversation-tabs><button role="tab">对话</button><button role="tab">探索</button></div></header></div></div><div id="detail"></div>';
   const slots = new Map();
   const disposers = [];
   let lastDraft;
   let openedCard;
+  let request;
   const reads = [];
   const plugin = Function('React', 'h', 'mockExploreView', 'EXPLORE_CSS', 'require', 'fetch', source)(
     React, React.createElement, (props) => {
+      request = props.request;
       lastDraft = props.initialDraft;
       if (props.onClosePage) openedCard = props.initialCardId;
       return props.onClosePage ? React.createElement('button', { onClick: props.onClosePage }, '返回主聊天') : null;
     }, '', (id) => {
       if (id === 'react-dom' && portal) return { createPortal };
       throw new Error('module unavailable');
-    }, async (path) => {
+    }, async (path, options) => {
       reads.push(new URL(path, 'https://test.invalid').searchParams.get('sessionId'));
+      if (fetchRequest && options.method === 'POST') return fetchRequest(JSON.parse(options.body));
       return { ok: true, json: async () => ({ cards: cards ?? [] }) };
     },
   );
@@ -41,7 +44,7 @@ async function setup(t, { cards, portal } = {}) {
         inject: (_name, install) => install(),
         register: (options, Component) => { slots.set(options.name, { options, Component }); },
       };
-      if (name === 'sessions') return { binding: () => undefined };
+      if (name === 'sessions') return sessionService ?? { binding: () => undefined };
       if (name === 'uiConversation') return { interactions: { register: () => () => {} }, binding: () => ({ activate() {} }) };
     },
     effect(install) { const dispose = install(); if (dispose) disposers.push(dispose); },
@@ -61,8 +64,63 @@ async function setup(t, { cards, portal } = {}) {
   });
   let navigations = 0;
   document.querySelector('[role="tab"] + [role="tab"]').addEventListener('click', () => navigations++);
-  return { slots, draft: () => lastDraft, navigations: () => navigations, openedCard: () => openedCard, reads };
+  return { slots, draft: () => lastDraft, navigations: () => navigations, openedCard: () => openedCard, reads,
+    request: (...args) => request(...args) };
 }
+
+test('Explain uses the same native card when the running host does not recognize explain-native', async (t) => {
+  const card = { cardId: 'retained-card', nativeSessionId: 'session-btw-explore-retained' };
+  const body = { cardId: 'requested-card', relation: 'root', source: { turn: 1, role: 'assistant' }, quote: 'Hermite 矩阵' };
+  const posts = [];
+  const prompts = [];
+  let blank = true;
+  let released = 0;
+  const app = await setup(t, {
+    async fetchRequest(post) {
+      posts.push(post);
+      return post.action === 'explain-native'
+        ? { ok: false, status: 400, json: async () => ({ error: '未知卡片操作。' }) }
+        : { ok: true, status: 200, json: async () => card };
+    },
+    sessionService: { retain(nativeSessionId) {
+      const session = {
+        sessionId: nativeSessionId, getSnapshot: () => ({ openState: 'open', blank }),
+        async prompt(content, mode, _signal, requestId) {
+          prompts.push({ nativeSessionId, content, mode, requestId });
+          blank = false;
+          return { ok: true, value: { accepted: true } };
+        },
+      };
+      return { ready: Promise.resolve({ session }), release() { released++; } };
+    } },
+  });
+  const explain = () => app.request('session-1', { action: 'explain-native', body });
+  assert.deepEqual(await explain(), card);
+  assert.deepEqual(await explain(), card);
+  assert.deepEqual(posts, ['explain-native', 'open-native', 'explain-native', 'open-native']
+    .map((action) => ({ ...body, sessionId: 'session-1', action })));
+  assert.equal(prompts.length, 1, 'an existing native reply must not trigger a second explanation');
+  assert.equal(prompts[0].nativeSessionId, card.nativeSessionId);
+  assert.equal(prompts[0].mode, 'queue');
+  assert.match(prompts[0].content[0].text, /解释.*选中的内容/);
+  assert.equal(prompts[0].requestId, 'btw-explore:explain:session-btw-explore-retained');
+  assert.equal(released, 2);
+});
+
+test('Explain never falls back after a failed or successful request to a current host', async (t) => {
+  const card = { cardId: 'ready-card', nativeSessionId: 'session-ready' };
+  const options = { action: 'explain-native', body: { cardId: card.cardId, quote: 'quote' } };
+  const actions = [];
+  let status = 503;
+  const app = await setup(t, { async fetchRequest(post) {
+    actions.push(post.action);
+    return { ok: status === 200, status, json: async () => status === 200 ? card : { error: '暂时无法发起解释，请重试。' } };
+  } });
+  await assert.rejects(app.request('session-1', options), /暂时无法发起解释/);
+  status = 200;
+  assert.deepEqual(await app.request('session-1', options), card);
+  assert.deepEqual(actions, ['explain-native', 'explain-native']);
+});
 
 test('the tree is a conversation tab with no duplicate header or assistant action', async (t) => {
   const app = await setup(t);

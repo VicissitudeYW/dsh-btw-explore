@@ -1,5 +1,6 @@
 const EXPLORE_QUESTION_LIMIT = 8000;
 const EXPLORE_QUOTE_LIMIT = 4000;
+const EXPLORE_EXPLANATION_QUESTION = '请结合原对话，用两三句话解释我选中的内容。只解释文字，不调用工具。';
 const EXPLORE_EMPTY_CARDS = [];
 const exploreChangeListeners = new Map();
 const EXPLORE_TURN_ERRORS = {
@@ -9,7 +10,11 @@ const EXPLORE_TURN_ERRORS = {
 };
 
 function exploreTitle(card) {
-  return card?.title?.trim() || '未命名卡片';
+  const title = card?.title?.trim();
+  if (title === EXPLORE_EXPLANATION_QUESTION && card.nativeSessionId && card.source?.quote) {
+    return card.source.quote.replace(/\s+/g, ' ').trim();
+  }
+  return title || '未命名卡片';
 }
 
 function exploreTrail(card, byId) {

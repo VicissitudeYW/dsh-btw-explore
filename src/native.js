@@ -1,6 +1,30 @@
 const EXPLORE_NATIVE_FACTORY = 'dsh-btw-explore/native';
 const EXPLORE_NATIVE_CONTENT = 'dsh-btw-explore.native.content';
 
+async function explainWithNativeSession(nativeSessionId, signal) {
+  const retain = () => sessionsService.retain(nativeSessionId, { source: 'btwExplore', signal });
+  let retained;
+  try {
+    try { retained = retain(); }
+    catch {
+      signal?.throwIfAborted();
+      await sessionsService.refresh();
+      retained = retain();
+    }
+    const { session } = await retained.ready;
+    signal?.throwIfAborted();
+    const state = session.getSnapshot();
+    if (session.sessionId !== nativeSessionId || state.openState !== 'open' || state.removed) {
+      throw new Error('无法打开子卡的对话，请重试。');
+    }
+    if (state.blank !== true || state.running || state.awaitingFirstTurn || state.pendingSubmissions?.length) return;
+    // Same host receipt as the current backend, even across renderer and host upgrades.
+    const result = await session.prompt([{ type: 'text', text: EXPLORE_EXPLANATION_QUESTION }], 'queue', signal,
+      `btw-explore:explain:${nativeSessionId}`);
+    if (!result?.ok) throw new Error('暂时无法发起解释，请重试。');
+  } finally { retained?.release(); }
+}
+
 function ExploreFixedChat({ renderSlot }) {
   return renderSlot('conversation.session', { view: 'chat' });
 }
