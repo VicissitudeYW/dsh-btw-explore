@@ -54,25 +54,12 @@ async function setup(t) {
   return { slots, draft: () => lastDraft, navigations: () => navigations };
 }
 
-test('header selects the tree; assistant entry opens a child page without switching tabs', async (t) => {
+test('header selects the tree without registering any permanent assistant actions', async (t) => {
   const app = await setup(t);
   await act(async () => document.querySelector('#entry button').click());
   assert.equal(app.navigations(), 1);
   assert.equal(overlay(), null);
-  const assistant = app.slots.get('conversation.chat.assistant-actions');
-  const container = document.createElement('div');
-  document.body.append(container);
-  const root = createRoot(container);
-  t.after(async () => { await act(async () => root.unmount()); });
-  await act(async () => root.render(React.createElement(assistant.Component, { sessionId: 'session-1', messageId: 'message-1' })));
-  const opener = container.querySelector('button');
-  await act(async () => opener.click());
-  assert.equal(app.navigations(), 1, 'message action leaves the current view active');
-  assert.ok(overlay());
-  assert.equal(app.draft().source.messageId, 'message-1');
-  await act(async () => overlay().querySelector('button').click());
-  assert.equal(overlay(), null);
-  assert.equal(document.activeElement, opener);
+  assert.equal(app.slots.has('conversation.chat.assistant-actions'), false);
 });
 
 test('opening the tree selects the exploration item in the same header overflow menu', async (t) => {
@@ -149,4 +136,42 @@ test('selection supplementation ignores other sessions and never duplicates a na
   region.querySelector('button').dataset.dshBtwSelection = 'native';
   await act(async () => document.dispatchEvent(new window.Event('selectionchange')));
   assert.equal(region.querySelectorAll('button').length, 1);
+});
+
+test('划词菜单只从单条消息打开原生卡；子卡可用同一段文字新建分支', async (t) => {
+  const app = await setup(t);
+  const frame = document.createElement('section');
+  frame.className = 'dsh-btw-page';
+  frame.dataset.btwTop = '';
+  frame.innerHTML = `<div data-btw-root-session="session-1" data-btw-native-card="parent">
+    <div data-conversation-session="native-1">
+      <div data-chat-flow-kind="assistant-step" data-chat-turn="4"><p>来自本轮的引用</p></div>
+      <div data-chat-flow-kind="user" data-chat-turn="5"><p>下一轮</p></div>
+      <div data-text-interaction-surface aria-hidden="false"><button>引用文本</button></div>
+    </div>
+  </div>`;
+  document.body.append(frame);
+  const surface = frame.querySelector('[data-text-interaction-surface]');
+  const paragraphs = frame.querySelectorAll('p');
+  const select = async (end) => {
+    const range = document.createRange();
+    range.setStart(paragraphs[0].firstChild, 0);
+    range.setEnd(end.firstChild, end.textContent.length);
+    await act(async () => {
+      document.getSelection().removeAllRanges();
+      document.getSelection().addRange(range);
+      document.dispatchEvent(new window.Event('selectionchange'));
+    });
+  };
+  await select(paragraphs[1]);
+  assert.equal(surface.querySelectorAll('button').length, 1, '跨消息选区不挂探索操作');
+  await select(paragraphs[0]);
+  assert.deepEqual([...surface.querySelectorAll('button')].map((button) => button.textContent), ['引用文本', '探索引用', '从此轮分支']);
+  await act(async () => [...surface.querySelectorAll('button')].at(-1).click());
+  assert.equal(app.navigations(), 0);
+  assert.equal(app.draft().relation, 'branch');
+  assert.equal(app.draft().parentId, 'parent');
+  assert.equal(app.draft().quote, '来自本轮的引用');
+  assert.deepEqual(app.draft().source, { role: 'assistant', turn: 4 });
+  assert.equal(document.getSelection().isCollapsed, true);
 });

@@ -259,17 +259,26 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
     const onSelection = () => {
       const selection = window.getSelection();
       const scope = bodyRef.current;
-      function answerFor(node) {
+      const answerFor = (node) => {
         const element = node?.nodeType === 1 ? node : node?.parentElement;
+        if (element?.closest('button, [contenteditable="true"], [inert], [aria-hidden="true"]')) return null;
         return element?.closest('[data-btw-answer]');
-      }
+      };
       const start = answerFor(selection?.anchorNode);
       const end = answerFor(selection?.focusNode);
       const quote = selection?.toString().trim().slice(0, EXPLORE_QUOTE_LIMIT);
-      const next = quote && start === end && scope?.contains(start)
-        ? { cardId: card.id, turnId: start.dataset.btwAnswer, quote } : null;
+      let next = null;
+      if (quote && selection.rangeCount === 1 && start && start === end && scope?.contains(start)) {
+        const range = selection.getRangeAt(0);
+        const rect = range.getClientRects?.()[0] ?? range.getBoundingClientRect?.();
+        const answerRect = start.getBoundingClientRect();
+        const scrollerRect = scope.getBoundingClientRect();
+        next = { cardId: card.id, turnId: start.dataset.btwAnswer, quote,
+          x: rect ? (rect.left + rect.right) / 2 - answerRect.left : 0,
+          y: rect ? (rect.top - scrollerRect.top >= 40 ? rect.top - 38 : rect.bottom + 4) - answerRect.top : 0 };
+      }
       setQuoteSelection((previous) => previous?.cardId === next?.cardId && previous?.turnId === next?.turnId
-        && previous?.quote === next?.quote ? previous : next);
+        && previous?.quote === next?.quote && previous?.x === next?.x && previous?.y === next?.y ? previous : next);
     };
     document.addEventListener('selectionchange', onSelection);
     return () => document.removeEventListener('selectionchange', onSelection);
@@ -374,7 +383,7 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
       anchorQuestion: turn.question,
       turnNumber,
       quote,
-      preview: Boolean(quote),
+      preview: relation === 'child' && Boolean(quote),
     }, opener);
     window.getSelection()?.removeAllRanges();
   }
@@ -505,14 +514,29 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
 
   function renderTurn(turn, index) {
     const running = turn.status === 'running';
-    const selectedQuote = quoteSelection?.cardId === card.id && quoteSelection.turnId === turn.id
-      ? quoteSelection.quote : '';
+    const selected = card.saved && turn.status === 'done' && quoteSelection?.cardId === card.id
+      && quoteSelection.turnId === turn.id ? quoteSelection : null;
     return h('article', { className: 'dsh-btw-turn', key: turn.id, 'data-btw-turn': turn.id, tabIndex: -1 },
       h('h3', { className: 'dsh-btw-turn-label' }, `第 ${index + 1} 轮`),
       h('p', { className: 'dsh-btw-question' }, turn.question),
       turn.answer && h('div', { className: 'dsh-btw-answer', 'data-btw-answer': turn.id },
         Markdown ? h(Markdown, { text: turn.answer, labels: {}, streaming: running, variant: 'body' })
           : h('div', { className: 'dsh-btw-plain-answer' }, turn.answer),
+        selected && h('div', { className: 'dsh-btw-answer-selection', 'aria-label': '选区操作', role: 'group',
+          style: { '--btw-selection-x': `${selected.x}px`, top: selected.y } },
+          [['child', '探索引用'], ['branch', '从此轮分支']].map(([relation, label]) => exploreButton(label, {
+            key: relation, disabled: Boolean(pending), 'aria-haspopup': 'dialog',
+            onPointerDown: (event) => event.preventDefault(),
+            onClick: (event) => {
+              const answer = event.currentTarget.closest('[data-btw-answer]');
+              const range = window.getSelection();
+              if (answer?.contains(range?.anchorNode) && answer.contains(range?.focusNode) && range.toString().trim().slice(0, EXPLORE_QUOTE_LIMIT) === selected.quote) {
+                startFromTurn(relation, turn, index + 1, answer, selected.quote);
+              }
+              setQuoteSelection(null);
+            },
+          }, 'quiet')),
+        ),
       ),
       (running || turn.status in EXPLORE_TURN_ERRORS) && h('div', { className: 'dsh-btw-turn-state' },
         h('span', { role: 'status' }, running ? '正在生成…' : (turn.error || EXPLORE_TURN_ERRORS[turn.status])),
@@ -523,17 +547,6 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
             if (currentId.current === card.id) scroll.current.explicitFollow = card.id;
           }),
         }),
-      ),
-      card.saved && turn.status === 'done' && h('div', { className: 'dsh-btw-turn-actions' },
-        exploreButton(selectedQuote ? '用选区建子卡' : '新建子卡', {
-          disabled: Boolean(pending),
-          'aria-haspopup': 'dialog',
-          onMouseDown: (event) => { if (selectedQuote && event.button === 0) event.preventDefault(); },
-          onClick: (event) => startFromTurn('child', turn, index + 1, event.currentTarget, selectedQuote),
-        }, selectedQuote ? 'highlight' : 'quiet'),
-        exploreButton('从此轮分支', { disabled: Boolean(pending), 'aria-haspopup': 'dialog',
-          onClick: (event) => startFromTurn('branch', turn, index + 1, event.currentTarget),
-        }, 'quiet'),
       ),
     );
   }

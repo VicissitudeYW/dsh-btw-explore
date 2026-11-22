@@ -25,6 +25,20 @@ const deferred = () => {
   return { promise, resolve };
 };
 
+async function selectAnswer(scope) {
+  const answer = scope.querySelector('[data-btw-answer]');
+  const text = answer.querySelector('.dsh-btw-plain-answer').firstChild;
+  const range = document.createRange();
+  range.setStart(text, 0);
+  range.setEnd(text, Math.min(9, text.length));
+  await act(async () => {
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+    document.dispatchEvent(new window.Event('selectionchange'));
+  });
+  return { answer, quote: range.toString() };
+}
+
 function makeCard(id = randomUUID(), extra = {}) {
   return {
     id, title: '根卡问题', saved: true, parentId: null, relation: 'root', anchorTurnId: null,
@@ -155,6 +169,8 @@ test('预览失败保留草稿并复用请求 ID，保存后续问并从首轮�
   await view.fill('继续问第二个问题');
   await view.click('继续提问');
   assert.equal(view.calls.at(-1).body.cardId, preview.cardId);
+  assert.equal(view.button('从此轮分支'), undefined, '分支操作仅在划词时出现');
+  const { quote: branchQuote } = await selectAnswer(view.surface());
   await view.click('从此轮分支');
   assert.equal(view.layers().length, 2);
   await view.fill('从首轮走另一条路');
@@ -163,6 +179,7 @@ test('预览失败保留草稿并复用请求 ID，保存后续问并从首轮�
   assert.equal(branch.parentId, preview.cardId);
   assert.equal(branch.anchorTurnId, preview.turnId);
   assert.equal(branch.relation, 'branch');
+  assert.equal(branch.quote, branchQuote);
   await view.click('返回上层');
   assert.equal(view.layers().length, 1);
   assert.match(view.text(), /继续作答/);
@@ -291,17 +308,8 @@ test('选区建子卡保留原文、父卡和指定轮次，默认先预览', as
   const sourcePage = view.container.querySelector('.dsh-btw-scroller');
   sourcePage.scrollTop = 160;
   await view.fill('留在父卡的草稿');
-  const text = view.container.querySelector('[data-btw-answer] .dsh-btw-plain-answer').firstChild;
-  const range = document.createRange();
-  range.setStart(text, 0);
-  range.setEnd(text, 9);
-  const quote = range.toString();
-  await act(async () => {
-    window.getSelection().removeAllRanges();
-    window.getSelection().addRange(range);
-    document.dispatchEvent(new window.Event('selectionchange'));
-  });
-  await view.click('用选区建子卡');
+  const { quote } = await selectAnswer(view.container);
+  await view.click('探索引用');
   assert.equal(view.layers().length, 1);
   assert.match(view.text(), new RegExp(quote));
   await view.fill('详细解释这句话');
@@ -346,7 +354,8 @@ test('父卡被盖住时仍然接收新回答，返回后保持来源处的滚�
   Object.defineProperties(scroller, { clientHeight: { value: 400 }, scrollHeight: { get: () => height } });
   scroller.scrollTop = 160;
   await act(async () => scroller.dispatchEvent(new window.Event('scroll')));
-  await view.click('新建子卡');
+  await selectAnswer(view.surface());
+  await view.click('探索引用');
   height = 880;
   view.cards.get(card.id).turns[1].answer = '继续生成中：越来越长的回答';
   await view.refresh();
@@ -356,7 +365,7 @@ test('父卡被盖住时仍然接收新回答，返回后保持来源处的滚�
   assert.equal(scroller.scrollTop, 160);
 });
 
-test('创建子卡后父卡重新读取期间也能返回到触发按钮', async (t) => {
+test('创建子卡后父卡重新读取期间也能返回到划词的回答', async (t) => {
   const card = makeCard();
   const delayedParent = deferred();
   let readingParent = false;
@@ -366,13 +375,13 @@ test('创建子卡后父卡重新读取期间也能返回到触发按钮', async
       if (!action && cardId === card.id && readingParent) await delayedParent.promise;
     },
   });
-  const trigger = view.button('新建子卡');
-  await view.click('新建子卡');
+  const { answer } = await selectAnswer(view.surface());
+  await view.click('探索引用');
   await view.fill('父卡在子卡提交后重新读取');
   readingParent = true;
-  await view.click('创建卡片');
+  await view.click('生成预览');
   await view.click('返回卡片树');
-  assert.ok(document.activeElement === trigger, 'focus returns to the child card button while the parent loads');
+  assert.ok(document.activeElement === answer, 'focus returns to the quoted answer while the parent loads');
   await act(async () => delayedParent.resolve());
 });
 

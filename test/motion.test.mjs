@@ -428,7 +428,7 @@ test('子卡进入被返回打断时复用父卡并保留草稿与阅读位置',
   await act(async () => input.dispatchEvent(new window.Event('input', { bubbles: true })));
   const scroller = parent.querySelector('.dsh-btw-scroller');
   scroller.scrollTop = 67;
-  const opener = [...parent.querySelectorAll('button')].find((button) => button.textContent === '新建子卡');
+  const opener = parent.querySelector('[data-btw-answer]');
   await app.draft(opener);
   const child = app.top();
   assert.equal(parent.hasAttribute('inert'), true);

@@ -24,30 +24,38 @@ async function explorerRequest(sessionId, options = {}) {
   return result;
 }
 
-function mainSelectionOrigin() {
+function chatSelection() {
   const selection = document.getSelection();
-  if (!selection || selection.isCollapsed || selection.rangeCount !== 1) return {};
+  if (!selection || selection.isCollapsed || selection.rangeCount !== 1) return null;
   const element = (node) => node?.nodeType === 1 ? node : node?.parentElement;
   const start = element(selection.anchorNode);
   const end = element(selection.focusNode);
-  const row = start?.closest('[data-chat-flow-kind="assistant-step"], [data-chat-flow-kind="assistant"], [data-chat-flow-kind="user"]');
-  if (!row || !end || !row.contains(end)) return {};
-  const source = { role: row.getAttribute('data-chat-flow-kind') === 'user' ? 'user' : 'assistant' };
+  const rowSelector = '[data-chat-flow-kind="assistant-step"], [data-chat-flow-kind="assistant"], [data-chat-flow-kind="user"]';
+  const skipped = 'input, textarea, button, [contenteditable="true"], [inert], [aria-hidden="true"]';
+  const row = start?.closest(rowSelector);
+  if (!row || end?.closest(rowSelector) !== row || start.closest(skipped) || end.closest(skipped)) return null;
+  const region = row.closest('[data-conversation-session]');
+  if (!region) return null;
+  const native = region.closest('[data-btw-native-card]');
+  if (native && !native.closest('.dsh-btw-page[data-btw-top]:not([data-btw-leaving])')) return null;
   const turn = row.getAttribute('data-chat-turn');
-  if (turn !== null && /^\d+$/.test(turn) && Number.isSafeInteger(Number(turn))) source.turn = Number(turn);
-  return { source, row };
+  const quote = selection.toString().trim().slice(0, EXPLORE_QUOTE_LIMIT);
+  if (!quote || turn === null || !/^\d+$/.test(turn) || !Number.isSafeInteger(Number(turn))) return null;
+  return { source: { role: row.dataset.chatFlowKind === 'user' ? 'user' : 'assistant', turn: Number(turn) }, row, region, native, quote };
 }
 
-function openFromChat(sessionId, { source, quote, opener }) {
-  openExplorerPage(sessionId, exploreRootDraft({ source, quote }), opener, 'chat');
+function openChatSelection({ source, row, region, native, quote }, relation) {
+  if (native) {
+    const parentId = native.dataset.btwNativeCard;
+    openExplorerPage(native.dataset.btwRootSession, {
+      key: `${relation}:${parentId}:${source.turn}`, relation, parentId, source, quote,
+    }, row);
+  } else {
+    openExplorerPage(region.dataset.conversationSession, exploreRootDraft({ source, quote }), row, 'chat');
+  }
 }
 
-function openNativeChild(owner, relation, source, opener, quote = '') {
-  openExplorerPage(owner.ownerSessionId, {
-    key: `${relation}:${owner.cardId}:${source.messageId ?? source.turn}`,
-    relation, parentId: owner.cardId, source, quote: quote.trim().slice(0, EXPLORE_QUOTE_LIMIT),
-  }, opener);
-}
+const selectionActions = (native) => native ? [['child', '探索引用'], ['branch', '从此轮分支']] : [['child', '探索引用']];
 
 let NativeMarkdown;
 let explorerPortal;
@@ -140,36 +148,34 @@ function supplementSelection(sessionId) {
   const sync = () => {
     queued = false;
     if (disposed) return;
-    const selection = document.getSelection();
-    const anchor = selection?.anchorNode;
-    const element = anchor?.nodeType === 1 ? anchor : anchor?.parentElement;
-    const region = element?.closest('[data-conversation-session]');
-    const native = region?.closest('[data-btw-native-card]');
+    const selected = chatSelection();
+    const { region, native } = selected ?? {};
     const isOwned = native ? native.dataset.btwRootSession === sessionId : region?.dataset.conversationSession === sessionId;
-    const next = isOwned && !selection?.isCollapsed
-      ? region.querySelector('[data-text-interaction-surface][aria-hidden="false"]') : null;
+    const next = isOwned ? region.querySelector('[data-text-interaction-surface][aria-hidden="false"]') : null;
     if (next === surface && added?.isConnected && !next.querySelector('[data-dsh-btw-selection="native"]')) return;
     remove();
-    if (!next || next.querySelector('[data-dsh-btw-selection]') || !selection?.toString().trim()) return;
+    if (!next || next.querySelector('[data-dsh-btw-selection]')) return;
     surface = next;
-    added = document.createElement('button');
-    added.type = 'button';
-    added.className = 'dsh-btw-entry';
+    added = document.createElement('span');
+    added.className = 'dsh-btw-selection-actions';
     added.dataset.dshBtwSelection = 'supplement';
-    added.textContent = '探索引用';
-    added.setAttribute('aria-haspopup', 'dialog');
-    added.addEventListener('pointerdown', (event) => event.preventDefault());
-    added.addEventListener('mousedown', (event) => event.preventDefault());
-    added.addEventListener('click', () => {
-      const quote = document.getSelection()?.toString().trim();
-      if (quote) {
-        const { source, row } = mainSelectionOrigin();
-        if (native && source) openNativeChild({ ownerSessionId: sessionId, cardId: native.dataset.btwNativeCard }, 'child', source, row ?? region, quote);
-        else if (!native) openFromChat(sessionId, { source, quote, opener: row ?? region });
-      }
-      document.getSelection()?.removeAllRanges();
-      remove();
-    });
+    for (const [relation, label] of selectionActions(native)) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'dsh-btw-entry';
+      button.textContent = label;
+      button.setAttribute('aria-haspopup', 'dialog');
+      button.addEventListener('pointerdown', (event) => event.preventDefault());
+      button.addEventListener('click', () => {
+        const current = chatSelection();
+        if (current?.region === region && current.native === native) {
+          openChatSelection(current, relation);
+          document.getSelection()?.removeAllRanges();
+        }
+        remove();
+      });
+      added.append(button);
+    }
     surface.classList.add('dsh-btw-selection-surface');
     surface.appendChild(added);
   };
@@ -177,7 +183,7 @@ function supplementSelection(sessionId) {
     if (!queued && !disposed) { queued = true; queueMicrotask(sync); }
   };
   const observer = new MutationObserver(schedule);
-  observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-hidden'] });
+  observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-hidden', 'inert', 'data-btw-top'] });
   document.addEventListener('selectionchange', schedule);
   schedule();
   return () => {
@@ -201,41 +207,21 @@ function ExplorerEntry({ sessionId, renderFactorySlot }) {
   );
 }
 
-function AskFromMessage({ sessionId, messageId, useChat }) {
-  const owner = React.useContext(ExploreCardContext);
-  let source = {};
-  if (typeof useChat === 'function') {
-    source = useChat((snapshot) => {
-      for (const turn of snapshot?.timeline?.turns?.values?.() ?? []) {
-        if (turn.data?.get('turn-tail')?.closing?.finalNode?.messageId === messageId) return { turn: turn.turn, messageId, role: 'assistant' };
-      }
-      return { messageId, role: 'assistant' };
-    });
-  } else if (messageId) source = { messageId, role: 'assistant' };
-  if (owner) return h('span', { className: 'dsh-btw-native-actions' },
-    ['child', 'branch'].map((relation) => h('button', { key: relation, type: 'button', className: 'dsh-btw-entry', 'aria-haspopup': 'dialog',
-      onClick: (event) => openNativeChild(owner, relation, source, event.currentTarget),
-    }, relation === 'child' ? '新建子卡' : '从此轮分支')),
-  );
-  return h('button', { type: 'button', className: 'dsh-btw-entry', title: '从这条回答探索', 'aria-haspopup': 'dialog',
-    onClick: (event) => openFromChat(sessionId, { source, opener: event.currentTarget }),
-  }, '探索');
-}
-
 function AskSelection({ sessionId, useSession, readText, dismiss, clearSelection }) {
-  const owner = React.useContext(ExploreCardContext);
   const resolvedSessionId = typeof useSession === 'function' ? useSession((session) => session.sessionId) : sessionId;
-  return h('button', { type: 'button', className: 'dsh-btw-entry', 'data-dsh-btw-selection': 'native', 'aria-haspopup': 'dialog', onPointerDown: (event) => event.preventDefault(), onClick: (event) => {
-    const text = readText?.();
-    if (text?.trim()) {
-      const { source, row } = mainSelectionOrigin();
-      const opener = row ?? event.currentTarget.closest('[data-conversation-session]');
-      if (owner && source) openNativeChild(owner, 'child', source, opener, text);
-      else if (!owner) openFromChat(resolvedSessionId ?? sessionId, { source, quote: text, opener });
-    }
-    clearSelection?.();
-    dismiss?.();
-  } }, '探索引用');
+  const selected = chatSelection();
+  if (!selected || selected.region.dataset.conversationSession !== resolvedSessionId || !readText?.()?.trim()) return null;
+  return h('span', { className: 'dsh-btw-selection-actions', 'data-dsh-btw-selection': 'native' },
+    selectionActions(selected.native).map(([relation, label]) => h('button', { key: relation, type: 'button',
+      className: 'dsh-btw-entry', 'aria-haspopup': 'dialog', onPointerDown: (event) => event.preventDefault(), onClick: () => {
+        const current = chatSelection();
+        if (current?.region === selected.region && current.native === selected.native) {
+          openChatSelection(current, relation);
+          clearSelection?.();
+        }
+        dismiss?.();
+      },
+    }, label)));
 }
 
 return {
@@ -261,14 +247,10 @@ return {
       name: 'conversation.session.header.utilities', id: EXPLORE_VIEW, order: 20,
       inject: (sessionId) => ({ sessionId }),
     }, ExplorerEntry));
-    slots.inject('conversation.chat.assistant-actions', () => slots.register({
-      name: 'conversation.chat.assistant-actions', id: EXPLORE_VIEW, order: 35,
-      inject: (sessionId) => ({ sessionId }),
-    }, AskFromMessage));
     ctx.effect(() => conversationService.interactions.register({
       id: EXPLORE_VIEW,
       onInteraction(request) {
-        if (!request.hasSelection || !request.readText()?.trim()) return;
+        if (!request.hasSelection || !request.readText()?.trim() || !chatSelection()) return;
         if (request.trigger === 'selection' && conversationService.interactions.getSnapshot?.().includes('quote')) return;
         request.open();
       },

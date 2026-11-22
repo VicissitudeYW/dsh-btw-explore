@@ -1,6 +1,5 @@
 const EXPLORE_NATIVE_FACTORY = 'dsh-btw-explore/native';
 const EXPLORE_NATIVE_CONTENT = 'dsh-btw-explore.native.content';
-const ExploreCardContext = React.createContext(null);
 
 function ExploreFixedChat({ renderSlot }) {
   return renderSlot('conversation.session', { view: 'chat' });
@@ -117,8 +116,7 @@ function ExploreNativeMount({ ownerSessionId, cardId, nativeSessionId, SessionPr
   return h('div', { ref: frame, className: 'dsh-btw-native', 'data-btw-native-card': cardId, 'data-btw-root-session': ownerSessionId },
     error ? h('div', { className: 'dsh-btw-banner dsh-btw-error', role: 'alert' },
       '无法打开对话，请重试。', exploreButton('重试', { onClick: () => setRevision((value) => value + 1) }))
-      : reference?.id === selectedSessionId ? h(ExploreCardContext.Provider, { value: { ownerSessionId, cardId } },
-        h(SessionProvider, { session: reference.retained }, renderSlot(EXPLORE_NATIVE_CONTENT, {})))
+      : reference?.id === selectedSessionId ? h(SessionProvider, { session: reference.retained }, renderSlot(EXPLORE_NATIVE_CONTENT, {}))
         : h('p', { className: 'dsh-btw-native-status', role: 'status' }, '正在打开对话…'),
   );
 }
