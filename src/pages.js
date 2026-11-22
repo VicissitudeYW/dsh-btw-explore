@@ -49,7 +49,7 @@ function restoreExplorerPage(page) {
   if (page.scroller?.isConnected) page.scroller.scrollTop = page.scrollTop;
 }
 
-function ExplorerPage({ sessionId, page, isTop, isLeaving, motion, isNested, titleId, homeLabel, request, Markdown, renderNative,
+function ExplorerPage({ sessionId, page, isTop, isLeaving, motion, motionSurface, isNested, titleId, homeLabel, request, Markdown, renderNative,
   dismiss, bindCard, navigate, onReadCards }) {
   const frame = React.useRef(null);
   const reportCards = React.useCallback((cards) => {
@@ -74,8 +74,9 @@ function ExplorerPage({ sessionId, page, isTop, isLeaving, motion, isNested, tit
     'data-btw-top': isTop ? '' : undefined,
     'data-btw-leaving': isLeaving ? '' : undefined,
     'data-btw-motion': motion,
+    'data-btw-motion-surface': motionSurface,
     'aria-hidden': isLeaving ? true : undefined,
-  }, h(ExploreView, {
+  }, h('div', { className: 'dsh-btw-page-content' }, h(ExploreView, {
     sessionId, request, Markdown, renderNative,
     isPageClosing: isLeaving,
     initialDraft: page.draft,
@@ -86,7 +87,7 @@ function ExplorerPage({ sessionId, page, isTop, isLeaving, motion, isNested, tit
     onClosePage: close,
     pageTitleId: isTop ? titleId : undefined,
     returnLabel: isNested ? '返回上层' : homeLabel,
-  }));
+  })));
 }
 
 function switchExplorerPages(pages, trail) {
@@ -121,7 +122,7 @@ function explorerMotionAvailable() {
     && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 }
 
-function transitionExplorerPages(previous, next, kind, restore, committedPages) {
+function transitionExplorerPages(previous, next, kind, restore, committedPages, returnToChat = false) {
   if (next === previous.pages) return previous;
   // A quick return can reclaim the still-mounted outgoing page and its editor.
   const pages = next.map((page) => previous.leaving.find((leaving) => page.cardId && leaving.cardId === page.cardId) ?? page);
@@ -132,51 +133,57 @@ function transitionExplorerPages(previous, next, kind, restore, committedPages) 
     && committedPages.has(page.key) && !pages.some((nextPage) => nextPage.key === page.key));
   const leaving = animated && outgoing ? [{ ...outgoing,
     leavingNested: previous.pages.includes(outgoing) ? previous.pages.indexOf(outgoing) > 0 : outgoing.leavingNested }] : [];
-  return { pages, leaving, revision: previous.revision + 1, restore,
+  return { pages, leaving, revision: previous.revision + 1, restore, returnToChat,
     homeOrigin: pages[0]?.origin ?? previous.homeOrigin,
-    motion: animated ? { kind, incomingKey: pages.at(-1)?.key } : null };
+    motion: animated ? { kind, incomingKey: pages.at(-1)?.key,
+      frame: kind === 'exit' || (kind === 'enter' && committedPages.size === 0) } : null };
 }
 
-function explorerNavigationMotion(previous, next, cards) {
+function explorerNavigationMotion(previous, next, graph) {
   const from = previous.at(-1);
   const to = next.at(-1);
   if (!to) return 'exit';
-  if (previous.some((page) => page.key === to.key)) return 'back';
-  const byId = new Map(cards.map((card) => [card.id, card]));
-  const depth = (page) => page.draft
-    ? exploreTrail(byId.get(page.draft.parentId), byId).length + 1
-    : exploreTrail(byId.get(page.cardId), byId).length;
-  const delta = depth(to) - depth(from);
+  const node = (id) => id ? graph.nodes.find((item) => item.card?.id === id) : undefined;
+  const fromNode = node(from.cardId);
+  const toNode = node(to.cardId);
+  const depth = (page, current) => {
+    if (current) return current.depth;
+    const parent = node(page.draft?.parentId);
+    return (parent?.depth ?? 0) + (parent && page.draft.relation === 'branch' ? 0 : 1);
+  };
+  const delta = depth(to, toNode) - depth(from, fromNode);
   if (delta) return delta > 0 ? 'forward' : 'back';
-  return cards.findIndex((card) => card.id === to.cardId) < cards.findIndex((card) => card.id === from.cardId)
-    ? 'switch-prev' : 'switch-next';
+  return (toNode?.x ?? 0) < (fromNode?.x ?? 0) ? 'switch-prev' : 'switch-next';
 }
 
-function explorerPageKeyframes(element, page, kind, leaving = false) {
+function explorerPageKeyframes(element, page, kind, frame) {
+  if (!frame && kind !== 'enter') {
+    const x = kind === 'switch-next' ? 12 : kind === 'switch-prev' ? -12 : 0;
+    const y = kind === 'back' ? -10 : kind === 'forward' ? 10 : 0;
+    return { frames: [{ opacity: .88, translate: `${x}px ${y}px` }, { opacity: 1, translate: '0px 0px' }], duration: 180 };
+  }
   const bounds = element.getBoundingClientRect();
   const dx = page.motionSource ? page.motionSource.x - bounds.left - bounds.width / 2 : 0;
   const dy = page.motionSource ? page.motionSource.y - bounds.top - bounds.height / 2 : 12;
   const ratio = Math.min(1, 24 / (Math.hypot(dx, dy) || 1));
   const sourceX = dx * ratio;
   const sourceY = dy * ratio;
+  if (!frame) {
+    return { frames: [{ opacity: .88, translate: `${sourceX}px ${sourceY}px` }, { opacity: 1, translate: '0px 0px' }], duration: 210 };
+  }
   element.style.setProperty('--btw-motion-origin-x', `${bounds.width && page.motionSource
     ? Math.max(0, Math.min(100, (page.motionSource.x - bounds.left) / bounds.width * 100)) : 50}%`);
   element.style.setProperty('--btw-motion-origin-y', `${bounds.height && page.motionSource
     ? Math.max(0, Math.min(100, (page.motionSource.y - bounds.top) / bounds.height * 100)) : 50}%`);
-  let x = 0;
-  let y = 0;
-  if (kind === 'enter' || kind === 'exit') { x = sourceX; y = sourceY; }
-  else if (kind === 'switch-next' || kind === 'switch-prev') x = (kind === 'switch-next' ? 1 : -1) * (leaving ? -12 : 18);
-  else y = (kind === 'back' ? -1 : 1) * (leaving ? -16 : 14);
+  const leaving = kind === 'exit';
   const rest = { opacity: 1, translate: '0px 0px', scale: '1' };
-  const displaced = { opacity: leaving ? 0 : kind === 'enter' ? 0.68 : 0.6,
-    translate: `${x}px ${y}px`, scale: kind === 'enter' || leaving ? '0.985' : '0.995' };
+  const displaced = { opacity: leaving ? 0 : 0.68, translate: `${sourceX}px ${sourceY}px`, scale: '0.985' };
   return { frames: leaving ? [rest, displaced] : [displaced, rest],
-    duration: leaving ? 150 : kind === 'enter' ? 210 : 180 };
+    duration: leaving ? 150 : 210 };
 }
 
 // This lives in the session header, so opening a page never replaces the chat or tree view.
-function ExplorePages({ sessionId, request, Markdown, renderNative, portal, ownerRef }) {
+function ExplorePages({ sessionId, request, Markdown, renderNative, portal, ownerRef, onReturnChat }) {
   const [deck, setDeck] = React.useState({ pages: [], leaving: [], revision: 0, motion: null, restore: null });
   const { pages, leaving, motion } = deck;
   const [cards, setCards] = React.useState(EXPLORE_EMPTY_CARDS);
@@ -199,6 +206,7 @@ function ExplorePages({ sessionId, request, Markdown, renderNative, portal, owne
 
   const opened = pages.length > 0;
   const visible = opened || leaving.length > 0;
+  useExplorerDeckDrag(overlay, visible);
   React.useLayoutEffect(() => {
     if (!visible || !portal) return;
     let owner = ownerRef.current;
@@ -221,11 +229,14 @@ function ExplorePages({ sessionId, request, Markdown, renderNative, portal, owne
         overlay.current?.querySelector('.dsh-btw-page[data-btw-top]')?.focus({ preventScroll: true });
       }
     }
-    if (deck.restore && (opened || !visible) && restoredRevision.current !== deck.revision) {
+    if (!visible && deck.returnToChat && restoredRevision.current !== deck.revision) {
+      restoredRevision.current = deck.revision;
+      onReturnChat?.();
+    } else if (deck.restore && (opened || !visible) && restoredRevision.current !== deck.revision) {
       restoredRevision.current = deck.revision;
       restoreExplorerPage(deck.restore);
     }
-  }, [deck, opened, visible]);
+  }, [deck, opened, visible, onReturnChat]);
   React.useLayoutEffect(() => {
     if (!visible) setCards(EXPLORE_EMPTY_CARDS);
   }, [visible]);
@@ -246,13 +257,14 @@ function ExplorePages({ sessionId, request, Markdown, renderNative, portal, owne
     function reduceMotion(event) { if (event.matches) finish(); }
     if (!explorerMotionAvailable()) { finish(); return; }
     try {
-      const incoming = overlay.current?.querySelector('.dsh-btw-page[data-btw-top]');
-      const outgoing = overlay.current?.querySelector('.dsh-btw-page[data-btw-leaving]');
-      for (const [element, page, isLeaving] of [[incoming, pages.at(-1), false], [outgoing, leaving[0], true]]) {
-        if (!element || !page) continue;
-        const { frames, duration } = explorerPageKeyframes(element, page, motion.kind, isLeaving);
+      const exiting = motion.kind === 'exit';
+      const frame = overlay.current?.querySelector(exiting ? '.dsh-btw-page[data-btw-leaving]' : '.dsh-btw-page[data-btw-top]');
+      const element = motion.frame ? frame : frame?.querySelector('.dsh-btw-page-content');
+      const page = exiting ? leaving[0] : pages.at(-1);
+      if (element && page) {
+        const { frames, duration } = explorerPageKeyframes(element, page, motion.kind, motion.frame);
         animations.push(element.animate(frames, { duration, fill: 'both',
-          easing: isLeaving ? 'cubic-bezier(.4, 0, 1, 1)' : 'cubic-bezier(.16, 1, .3, 1)' }));
+          easing: exiting ? 'cubic-bezier(.4, 0, 1, 1)' : 'cubic-bezier(.16, 1, .3, 1)' }));
       }
     } catch { finish(); }
     media?.addEventListener?.('change', reduceMotion);
@@ -299,8 +311,10 @@ function ExplorePages({ sessionId, request, Markdown, renderNative, portal, owne
       if (!previous.pages.length) return previous;
       const next = switchExplorerPages(previous.pages, trail);
       const existing = previous.pages.findIndex((page) => page.cardId === trail.at(-1)?.id);
-      const restore = !trail.length ? previous.pages[0] : !fromMap && existing >= 0 ? previous.pages[existing + 1] : null;
-      return transitionExplorerPages(previous, next, explorerNavigationMotion(previous.pages, next, cards), restore, committedPages.current);
+      const returnToChat = fromMap && !trail.length && previous.homeOrigin !== 'chat' && typeof onReturnChat === 'function';
+      const restore = returnToChat ? null
+        : !trail.length ? previous.pages[0] : !fromMap && existing >= 0 ? previous.pages[existing + 1] : null;
+      return transitionExplorerPages(previous, next, explorerNavigationMotion(previous.pages, next, graph), restore, committedPages.current, returnToChat);
     });
   }
 
@@ -319,13 +333,18 @@ function ExplorePages({ sessionId, request, Markdown, renderNative, portal, owne
     'data-btw-has-map': cards.length ? '' : undefined,
     style: cards.length ? { '--btw-map-content-width': `${graph.fitWidth}px` } : undefined,
   },
-    [...leaving, ...pages].map((page) => h(ExplorerPage, {
-      key: page.key, sessionId, page, isTop: page === pages.at(-1), isLeaving: leaving.includes(page),
-      motion: leaving.includes(page) ? 'exit' : page.key === motion?.incomingKey ? motion.kind : undefined,
-      isNested: leaving.includes(page) ? page.leavingNested : pages.indexOf(page) > 0, titleId, homeLabel,
-      request, Markdown, renderNative, dismiss, bindCard, navigate, onReadCards: setCards,
-    })),
-    h(ExploreNavigation, { graph, activeId, returnLabel: homeLabel,
+    [...leaving, ...pages].map((page) => {
+      const isLeaving = leaving.includes(page);
+      const animated = isLeaving ? motion?.kind === 'exit' : page.key === motion?.incomingKey;
+      return h(ExplorerPage, {
+        key: page.key, sessionId, page, isTop: page === pages.at(-1), isLeaving,
+        motion: animated ? motion.kind : undefined,
+        motionSurface: animated ? (motion.frame ? 'frame' : 'content') : undefined,
+        isNested: isLeaving ? page.leavingNested : pages.indexOf(page) > 0, titleId, homeLabel,
+        request, Markdown, renderNative, dismiss, bindCard, navigate, onReadCards: setCards,
+      });
+    }),
+    h(ExploreNavigation, { graph, activeId, returnLabel: '返回主聊天',
       onNavigate: (trail) => navigate(trail, true) }),
   );
   return portal ? portal(stack, document.body) : stack;

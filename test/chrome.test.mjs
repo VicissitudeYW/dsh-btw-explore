@@ -39,18 +39,23 @@ test('原生卡的外层控件保留返回、来源跳转和明确的移除确�
 
   await act(async () => root.render(React.createElement(ExploreView, {
     sessionId: 'owner', initialCardId: card.id, request,
-    returnLabel: '返回上层', onClosePage: () => { closed += 1; },
+    pageTitleId: 'card-heading', returnLabel: '返回上层', onClosePage: () => { closed += 1; },
     onNavigate: (trail) => navigation.push(trail.map((item) => item.id)),
     renderNative: () => React.createElement('section', { 'data-native-content': true }, '原生消息与输入'),
   })));
   t.after(async () => { await act(async () => root.unmount()); });
 
-  assert.equal(document.querySelector('h2').textContent, card.title);
+  assert.equal(document.querySelector('h1#card-heading').textContent, `${quote.slice(0, 40)}…`);
   assert.ok(document.querySelector('[data-native-content]'));
+  assert.ok(document.querySelector('[data-btw-drag-handle]'));
+  assert.doesNotMatch(document.body.textContent, /根卡|子卡|分支/);
   assert.equal(button('返回上层').getAttribute('title'), 'Esc');
   assert.ok(document.querySelector('nav[aria-label="卡片路径"]').textContent.includes(parent.title));
   assert.equal(document.querySelector('.dsh-btw-source-label').textContent, `来自 ${parent.title}`);
-  assert.equal(document.querySelector('.dsh-btw-quoted details').open, false);
+  const details = document.querySelector('.dsh-btw-quote-details');
+  assert.equal(details.open, false);
+  await act(async () => details.querySelector('summary').click());
+  assert.equal(details.open, true);
   assert.equal(document.querySelector('.dsh-btw-quoted-full').textContent, quote);
   for (const icon of document.querySelectorAll('.dsh-btw-chrome-icon')) {
     assert.equal(icon.getAttribute('aria-hidden'), 'true', '装饰图标不应改写控件名称');

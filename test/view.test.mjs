@@ -15,6 +15,7 @@ const read = (file) => fs.readFileSync(new URL(`../src/${file}.js`, import.meta.
 const { ExploreView, ExplorePages, openExplorerPage, exploreRootDraft, exploreNodeLayout } = Function('React', 'h', `
   ${read('view')}
   ${read('navigation')}
+  ${read('drag')}
   ${read('pages')}
   return { ExploreView, ExplorePages, openExplorerPage, exploreRootDraft, exploreNodeLayout };
 `)(React, React.createElement);
@@ -188,7 +189,7 @@ test('预览失败保留草稿并复用请求 ID，保存后续问并从首轮�
   assert.equal(view.source(), undefined, 'dismissing a page does not navigate to the chat tab');
 });
 
-test('二维导航由下向上逐层展开，分支与来源同层且保留真实来源链', () => {
+test('二维导航由上向下逐层展开，分支与来源同层且保留真实来源链', () => {
   const parent = makeCard('parent');
   const child = makeCard('child', { parentId: 'parent', relation: 'child' });
   const branch = makeCard('branch', { parentId: 'parent', relation: 'branch' });
@@ -201,8 +202,8 @@ test('二维导航由下向上逐层展开，分支与来源同层且保留真�
   assert.equal(node('child').depth, 2);
   assert.equal(node('branch').depth, 1, '分支保持与来源相同的空间层级');
   assert.equal(node('nested').depth, 2);
-  assert.equal(home.y - node('parent').y, 72);
-  assert.equal(node('parent').y - node('child').y, 72);
+  assert.equal(node('parent').y - home.y, 72);
+  assert.equal(node('child').y - node('parent').y, 72);
   assert.equal(node('branch').y, node('parent').y);
   assert.ok(node('branch').x < node('parent').x, '分支在同层来源旁边展开');
   assert.equal(node('parent').x - node('branch').x, 38);
@@ -416,7 +417,7 @@ test('关闭待提交页面后迟到的创建结果进入树，不会替换新�
   assert.equal(view.layers().length, 0);
   await view.entry({ key: 'new', quote: '新引用' });
   await act(async () => submitted.resolve());
-  assert.equal(view.surface().querySelector('.dsh-btw-head-title h2').textContent, '新建探索卡片');
+  assert.equal(view.surface().querySelector('.dsh-btw-head-title h1').textContent, '新引用');
   assert.match(view.text(), /新引用/);
   assert.doesNotMatch(view.text(), /旧引用/);
   assert.equal(view.surface().querySelector('textarea').value, '');

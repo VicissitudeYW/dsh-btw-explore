@@ -2,7 +2,6 @@ const EXPLORE_QUESTION_LIMIT = 8000;
 const EXPLORE_QUOTE_LIMIT = 4000;
 const EXPLORE_EMPTY_CARDS = [];
 const exploreChangeListeners = new Map();
-const EXPLORE_RELATIONS = { root: '根卡', child: '子卡', branch: '分支' };
 const EXPLORE_TURN_ERRORS = {
   failed: '回答未完成，可以重试本轮。',
   cancelled: '已停止生成。',
@@ -51,9 +50,10 @@ function exploreChromeIcon(name) {
     source: ['M9 5H4v5h5V5Zm0 5c0 4-1 6-4 8', 'M20 5h-5v5h5V5Zm0 5c0 4-1 6-4 8'],
     return: ['m9 5-5 5 5 5', 'M4 10h10a5 5 0 0 1 5 5v4'],
     remove: ['M4 7h16', 'M9 7V4h6v3', 'm6 7 1 13h10l1-13', 'M10 11v5', 'M14 11v5'],
+    grip: ['M9 5v.01M9 12v.01M9 19v.01M15 5v.01M15 12v.01M15 19v.01'],
   };
   return h('svg', { className: 'dsh-btw-chrome-icon', key: 'icon', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
-    strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true, focusable: false,
+    strokeWidth: name === 'grip' ? 2.6 : 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true, focusable: false,
   }, (paths[name] ?? paths.back).map((d, index) => h('path', { d, key: index })));
 }
 
@@ -394,7 +394,7 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
     if (!text || blocked || mutation.current) return;
     if (composer) {
       if (composer.parentId && !byId.get(composer.parentId)?.saved) {
-        setOperationError('来源卡片已不可用，可以复制问题后新建一张根卡。');
+        setOperationError('来源卡片已不可用，可以复制问题后新建一张探索卡片。');
         return;
       }
       const { relation, parentId, anchorTurnId, source, quote, preview } = composer;
@@ -472,7 +472,7 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
               selectCard(item.id);
               if (item.nativeSessionId) openSavedExplorerPage(sessionId, item.id, event.currentTarget);
             },
-            title: `${name} · ${EXPLORE_RELATIONS[item.relation] ?? '卡片'}`,
+            title: name,
           },
           h('span', { className: `dsh-btw-node-mark dsh-btw-mark-${item.relation}`, 'aria-hidden': true }),
           h('span', { className: 'dsh-btw-node-name' }, name),
@@ -504,7 +504,7 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
           ? exploreChromeButton('返回来源', 'return', { onClick: () => onNavigate ? navigateTo(parent.id) : onClosePage() }, 'source-return')
           : exploreChromeButton('查看来源', 'return', { onClick: () => selectCard(parent.id, turnId) }, 'source-return')),
       ),
-      excerpt && h('blockquote', { className: 'dsh-btw-quoted' },
+      !isPage && excerpt && h('blockquote', { className: 'dsh-btw-quoted' },
         excerpt.length <= 240 ? excerpt : h('details', null,
           h('summary', null, h('span', { className: 'dsh-btw-quote-preview' }, `${excerpt.slice(0, 160)}…`)),
           h('div', { className: 'dsh-btw-quoted-full' }, excerpt),
@@ -552,10 +552,21 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
   }
 
   const promptAllowed = !preparingNative && !card?.nativeSessionId && Boolean(composer || (card?.saved && lastTurn?.status === 'done'));
-  const title = composer ? ({ root: '新建探索卡片', child: '新建子卡', branch: '新建分支' })[composer.relation]
-    : card ? exploreTitle(card) : '探索';
-  const sourceParentId = card?.source?.cardId || card?.parentId;
-  const sourceTurnId = card?.source?.turnId || card?.anchorTurnId;
+  const title = composer ? '新建探索卡片' : card ? exploreTitle(card) : '探索';
+  const source = composer ? { ...composer.source, quote: composer.quote } : card?.source;
+  const sourceParentId = composer ? composer.parentId : card?.source?.cardId || card?.parentId;
+  const sourceTurnId = composer ? composer.anchorTurnId : card?.source?.turnId || card?.anchorTurnId;
+  const quoteHeading = isPage && source?.quote;
+  const quoteChars = quoteHeading ? Array.from(quoteHeading.replace(/\s+/gu, ' ').trim()) : [];
+  const expandQuote = quoteChars.length > 40 || quoteHeading && /[\r\n]/u.test(quoteHeading);
+  const titleText = quoteChars.length > 40 ? `${quoteChars.slice(0, 40).join('')}…` : expandQuote ? quoteChars.join('') : quoteHeading;
+  const quoteTitle = quoteHeading && h('h1', { id: pageTitleId, className: 'dsh-btw-quote-title' }, titleText);
+  const removeAction = !composer && card?.saved && exploreChromeButton(card.nativeSessionId ? '移除' : '删除', 'remove', {
+    disabled: blocked || card.status === 'running',
+    'aria-label': card.nativeSessionId ? '从树中移除卡片和后代' : '删除卡片和后代',
+    title: card.nativeSessionId ? '从树中移除' : '删除',
+    onClick: () => setConfirmRemove(card.id),
+  }, 'remove');
   const removal = { count: 0, running: card?.status === 'running', hasNativeSession: Boolean(card?.nativeSessionId) };
   if (card && confirmRemove === card.id) {
     const unchecked = [...(children.get(card.id) ?? [])];
@@ -600,6 +611,8 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
       h('section', { className: 'dsh-btw-main', 'aria-label': '探索对话' },
         h('header', { className: 'dsh-btw-head' },
           h('div', { className: 'dsh-btw-head-path' },
+            isPage && h('span', { className: 'dsh-btw-grip', 'data-btw-drag-handle': '', role: 'img',
+              'aria-label': '拖动卡片', title: '拖动卡片' }, exploreChromeIcon('grip')),
             h('nav', { className: 'dsh-btw-crumbs', 'aria-label': '卡片路径' },
               h('span', { className: 'dsh-btw-crumb-origin' }, exploreChromeIcon('explore'),
                 h('span', null, returnLabel === '返回主聊天' ? '主聊天 / 探索' : '探索')),
@@ -610,20 +623,19 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
                     : exploreButton(exploreTitle(parent), { onClick: () => selectCard(parent.id), title: exploreTitle(parent) }, 'quiet'),
                 )),
             ),
-            isPage ? exploreChromeButton(returnLabel, 'back', { onClick: onClosePage, title: 'Esc' }, 'return')
+            isPage ? h('div', { className: 'dsh-btw-head-actions' },
+              exploreChromeButton(returnLabel, 'back', { onClick: onClosePage, title: 'Esc' }, 'return'),
+              removeAction)
               : onChat && exploreChromeButton('回到主聊天', 'back', { onClick: gotoChat }, 'return'),
           ),
           h('div', { className: 'dsh-btw-head-title' },
-            h('h2', { id: pageTitleId, title }, title),
-            !composer && card?.saved && exploreChromeButton(card.nativeSessionId ? '移除' : '删除', 'remove', {
-              disabled: blocked || card.status === 'running',
-              'aria-label': card.nativeSessionId ? '从树中移除卡片和后代' : '删除卡片和后代',
-              onClick: () => setConfirmRemove(card.id),
-            }, 'remove'),
+            quoteTitle ? expandQuote ? h('details', { className: 'dsh-btw-quote-details' },
+              h('summary', { title: '查看完整引用' }, quoteTitle),
+              h('blockquote', { className: 'dsh-btw-quoted-full' }, quoteHeading)) : quoteTitle
+              : h('h2', { id: pageTitleId, title }, title),
+            !isPage && removeAction,
           ),
-          !composer && card && h('p', { className: 'dsh-btw-card-meta' },
-            [EXPLORE_RELATIONS[card.relation], card.nativeSessionId ? null : `${card.turnCount} 轮问答`,
-              card.context?.truncated ? '引用较长，已保留部分内容' : null].filter(Boolean).join(' · ')),
+          isPage && sourceBlock(source, sourceParentId, sourceTurnId, null, composer?.turnNumber),
         ),
         readError && h('div', { className: 'dsh-btw-banner dsh-btw-error', role: 'alert' },
           h('span', null, readError), exploreButton('重新加载', { onClick: refresh })),
@@ -645,14 +657,13 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
             exploreButton('保存卡片', { disabled: blocked || card.turns[0]?.status !== 'done', onClick: () => mutate('save', { cardId: card.id }) }, 'primary'),
           )),
         card?.nativeSessionId && isPage && renderNative ? h(React.Fragment, null,
-          h('div', { className: 'dsh-btw-native-source' }, sourceBlock(card.source, sourceParentId, sourceTurnId)),
           card.nativeReady ? renderNative(card, sessionId)
             : h('div', { className: 'dsh-btw-banner' }, '对话尚未打开，请重试。',
               exploreButton('打开对话', { disabled: blocked, onClick: prepareNative })),
         ) : h('div', { className: 'dsh-btw-scroller', ref: bodyRef, onScroll: rememberScroll },
           h('div', { className: 'dsh-btw-read-column' },
             composer ? h(React.Fragment, null,
-              sourceBlock({ ...composer.source, quote: composer.quote }, composer.parentId, composer.anchorTurnId, composer.anchorQuestion, composer.turnNumber),
+              !isPage && sourceBlock(source, sourceParentId, sourceTurnId, composer.anchorQuestion, composer.turnNumber),
               preparingNative ? operationError
                 ? exploreButton('重试打开', { disabled: blocked, onClick: prepareNative })
                 : h('p', { className: 'dsh-btw-start-copy', role: 'status' }, '正在打开对话…')
@@ -661,7 +672,7 @@ function ExploreView({ sessionId, initialDraft = null, initialCardId, onBindCard
                 : composer.relation === 'child' ? '围绕选定的回答提一个新问题。'
                   : composer.quote ? '可以围绕引用追问细节、例子或相关概念。' : '提出一个想在探索里单独讨论的问题。'),
             ) : card ? h(React.Fragment, null,
-              sourceBlock(card.source, sourceParentId, sourceTurnId),
+              !isPage && sourceBlock(source, sourceParentId, sourceTurnId),
               card.nativeSessionId && exploreButton('打开对话', { onClick: (event) => openSavedExplorerPage(sessionId, card.id, event.currentTarget) }, 'primary'),
               card.turns.map(renderTurn),
             ) : h('div', { className: 'dsh-btw-empty' },

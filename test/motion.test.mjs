@@ -16,6 +16,7 @@ const read = (file) => fs.readFileSync(new URL(`../src/${file}.js`, import.meta.
 const loadComponents = Function('React', 'h', 'setTimeout', 'clearTimeout', `
   ${read('view')}
   ${read('navigation')}
+  ${read('drag')}
   ${read('pages')}
   return { ExploreView, ExplorePages, openExplorerPage, openSavedExplorerPage };
 `);
@@ -55,7 +56,7 @@ function card(id, title, parentId = null) {
 // JSDOM does not render WAAPI. Control its promises and the component-local
 // fallback clock together; React, JSDOM and global timers keep their real clocks.
 async function mount(t, { reduced = false, support = true, native = false, initialRead, nativeOpen, nativeDetails,
-  inertAwareFocus = false, clock = motionClock() } = {}) {
+  inertAwareFocus = false, clock = motionClock(), onReturnChat } = {}) {
   const { ExploreView, ExplorePages, openExplorerPage, openSavedExplorerPage } = loadComponents(
     React, React.createElement, clock.setTimeout, clock.clearTimeout,
   );
@@ -65,7 +66,8 @@ async function mount(t, { reduced = false, support = true, native = false, initi
   const sessionId = randomUUID();
   const source = document.querySelector('#opener');
   const owner = document.querySelector('#owner');
-  const cards = [card('parent', '父卡'), card('first', '第一个子卡', 'parent'), card('second', '第二个子卡', 'parent'), card('third', '第三个子卡', 'parent')]
+  const cards = [card('parent', '父卡'), card('first', '第一个子卡', 'parent'), card('second', '第二个子卡', 'parent'),
+    card('third', '第三个子卡', 'parent'), { ...card('branch', '同排分支', 'parent'), relation: 'branch' }]
     .map((item) => native ? { ...item, nativeSessionId: `native:${item.id}`, nativeReady: true } : item);
   const initialIds = new Set(cards.map((item) => item.id));
   const animations = [];
@@ -136,6 +138,7 @@ async function mount(t, { reduced = false, support = true, native = false, initi
   await act(async () => root.render(React.createElement(React.Fragment, null,
     React.createElement(ExploreView, { sessionId, request }),
     React.createElement(ExplorePages, { sessionId, request, portal: createPortal, ownerRef: { current: source },
+      onReturnChat: onReturnChat && (() => onReturnChat(owner)),
       renderNative: native ? (item) => React.createElement(NativeSession, { cardId: item.id }) : undefined }),
   )));
   const top = () => document.querySelector('.dsh-btw-page[data-btw-top]');
@@ -199,19 +202,56 @@ test('同级切换播放相反水平位移，重复点击当前页不重播', as
   assert.equal(app.top(), firstPage);
   assert.equal(app.animations.length, count);
   await app.navigate('第二个子卡');
-  const next = app.animations.findLast((animation) => animation.target === app.top());
+  const next = app.animations.findLast((animation) => app.top().contains(animation.target));
   assert.ok(next, '新目标必须实际启动动画');
+  assert.notEqual(next.target, app.top(), '文字动效不可移动整个卡框或露出后方主聊天');
+  assert.equal(app.animations.slice(count).length, 1, '切换期间离开的整张卡与遮罩不应变透明');
+  assert.ok(next.frames.every((frame) => !frame.scale), '日常切卡不缩放正文');
   assert.equal(app.top().dataset.btwMotion, 'switch-next');
-  assert.match(next.frames[0].translate, /^18px 0px$/);
+  assert.equal(next.frames[0].translate, '12px 0px');
   assert.equal(firstPage.isConnected, true, '离开的真实页面应保留至退出完成');
   assert.equal(firstPage.hasAttribute('inert'), true);
   assert.equal(firstPage.getAttribute('aria-hidden'), 'true');
   await app.settle();
   assert.equal(firstPage.isConnected, false);
   await app.navigate('第一个子卡');
-  const previous = app.animations.findLast((animation) => animation.target === app.top());
+  const previous = app.animations.findLast((animation) => app.top().contains(animation.target));
   assert.equal(app.top().dataset.btwMotion, 'switch-prev');
-  assert.equal(previous.frames[0].translate, '-18px 0px');
+  assert.equal(previous.frames[0].translate, '-12px 0px');
+});
+
+test('地图顶点从卡片树返回主聊天，但普通关闭仍保留原有返回行为', async (t) => {
+  let chatReturns = 0;
+  const app = await mount(t, { onReturnChat(owner) {
+    assert.equal(owner.hasAttribute('inert'), false, '主聊天切换前要先释放宿主焦点');
+    chatReturns++;
+  } });
+  await app.open();
+  await app.settle();
+  await app.close();
+  await app.settle();
+  assert.equal(chatReturns, 0);
+  await app.open();
+  await app.settle();
+  await app.navigate('返回主聊天');
+  assert.equal(chatReturns, 0, '等关闭动效结束再切换背景视图');
+  await app.settle();
+  assert.equal(chatReturns, 1);
+  assert.equal(app.overlay(), null);
+});
+
+test('圆点地图的同排分支与下一层使用和坐标一致的动效方向', async (t) => {
+  const app = await mount(t);
+  await app.open('parent');
+  await app.settle();
+  await app.navigate('同排分支');
+  assert.match(app.animations.at(-1).frames[0].translate, /^-?12px 0px$/);
+  await app.settle();
+  await app.navigate('第一个子卡');
+  assert.equal(app.animations.at(-1).frames[0].translate, '0px 10px');
+  await app.settle();
+  await app.navigate('父卡');
+  assert.equal(app.animations.at(-1).frames[0].translate, '0px -10px');
 });
 
 test('退出完成前保留真实页面和主界面inert，结束后还原来源焦点与滚动', async (t) => {

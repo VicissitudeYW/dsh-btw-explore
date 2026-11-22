@@ -1,10 +1,14 @@
-/* WAAPI owns foreground motion so a reused page can enter on every navigation.
-   Covered ancestors keep explore.css's baseline deck transform and live content. */
-.dsh-btw-overlay .dsh-btw-page[data-btw-top] { animation: none; }
-.dsh-btw-overlay .dsh-btw-page[data-btw-motion] {
+/* Only the first entrance and final exit move the frame. In-deck navigation
+   keeps a single opaque card over the chat and animates only its contents. */
+.dsh-btw-overlay .dsh-btw-page { transition: none; }
+.dsh-btw-overlay .dsh-btw-page[data-btw-top] { animation: none; z-index: 2; }
+.dsh-btw-page-content { height: 100%; }
+.dsh-btw-overlay .dsh-btw-page[data-btw-motion-surface="frame"] {
   transform-origin: var(--btw-motion-origin-x, 50%) var(--btw-motion-origin-y, 50%);
   will-change: translate, scale, opacity;
 }
+.dsh-btw-page[data-btw-motion-surface="content"] > .dsh-btw-page-content { will-change: translate, opacity; }
+.dsh-btw-overlay:not([data-btw-closing]) .dsh-btw-page:not([data-btw-top]) { visibility: hidden; }
 .dsh-btw-overlay .dsh-btw-page[data-btw-leaving] {
   z-index: 1;
   transform: none;
@@ -13,6 +17,6 @@
 .dsh-btw-overlay[data-btw-closing] { pointer-events: none; }
 
 @media (prefers-reduced-motion: reduce) {
-  .dsh-btw-overlay .dsh-btw-page { transition: none; }
-  .dsh-btw-overlay .dsh-btw-page[data-btw-motion] { will-change: auto; }
+  .dsh-btw-overlay .dsh-btw-page[data-btw-motion-surface="frame"],
+  .dsh-btw-page[data-btw-motion-surface="content"] > .dsh-btw-page-content { will-change: auto; }
 }

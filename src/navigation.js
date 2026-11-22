@@ -49,7 +49,7 @@ function exploreNodeLayout(cards) {
   for (const [level, row] of rows) {
     row.forEach((node, index) => {
       node.x = (width - (row.length - 1) * EXPLORE_NODE_STEP) / 2 + index * EXPLORE_NODE_STEP;
-      node.y = EXPLORE_MAP_PADDING + (depth - level) * EXPLORE_LAYER_STEP;
+      node.y = EXPLORE_MAP_PADDING + level * EXPLORE_LAYER_STEP;
     });
   }
   const fitWidth = width + 2 * (EXPLORE_MAP_X_MARGIN - EXPLORE_MAP_PADDING);
@@ -60,8 +60,8 @@ function exploreEdge(node) {
   const source = node.parent;
   const radius = source.card ? 12 : 14;
   if (node.depth !== source.depth) {
-    const fromY = source.y - radius;
-    const toY = node.y + 12;
+    const fromY = source.y + radius;
+    const toY = node.y - 12;
     const middle = (fromY + toY) / 2;
     return { x1: source.x, y1: fromY, x2: node.x, y2: toY,
       d: `M ${source.x} ${fromY} C ${source.x} ${middle} ${node.x} ${middle} ${node.x} ${toY}` };
@@ -71,14 +71,14 @@ function exploreEdge(node) {
   const toX = node.x - direction * 12;
   const distance = Math.abs(node.x - source.x);
   if (distance > EXPLORE_NODE_STEP) {
-    const fromY = source.y + radius;
-    const toY = node.y + 12;
-    const below = source.y + 28;
+    const fromY = source.y - radius;
+    const toY = node.y - 12;
+    const lane = source.y - 28;
     const shoulder = direction * 24;
     return { x1: source.x, y1: fromY, x2: node.x, y2: toY,
-      d: `M ${source.x} ${fromY} C ${source.x} ${below} ${source.x + shoulder / 2} ${below} ${source.x + shoulder} ${below}`
-        + ` C ${source.x + shoulder} ${below} ${node.x - shoulder} ${below} ${node.x - shoulder} ${below}`
-        + ` C ${node.x - shoulder / 2} ${below} ${node.x} ${below} ${node.x} ${toY}` };
+      d: `M ${source.x} ${fromY} C ${source.x} ${lane} ${source.x + shoulder / 2} ${lane} ${source.x + shoulder} ${lane}`
+        + ` C ${source.x + shoulder} ${lane} ${node.x - shoulder} ${lane} ${node.x - shoulder} ${lane}`
+        + ` C ${node.x - shoulder / 2} ${lane} ${node.x} ${lane} ${node.x} ${toY}` };
   }
   return { x1: fromX, y1: source.y, x2: toX, y2: node.y,
     d: `M ${fromX} ${source.y} C ${fromX + direction * 6} ${source.y} ${toX - direction * 6} ${node.y} ${toX} ${node.y}` };
@@ -129,8 +129,8 @@ function ExploreNavigation({ graph, activeId, onNavigate, returnLabel }) {
     const y = node.y + metrics.padY;
     const moveX = !metrics.fitsX && (center || x - EXPLORE_MAP_X_MARGIN < area.scrollLeft
       || x + EXPLORE_MAP_X_MARGIN > area.scrollLeft + metrics.width);
-    const moveY = center || y - EXPLORE_MAP_Y_MARGIN < area.scrollTop
-      || y + EXPLORE_MAP_Y_MARGIN > area.scrollTop + metrics.height;
+    const moveY = !metrics.fitsY && (center || y - EXPLORE_MAP_Y_MARGIN < area.scrollTop
+      || y + EXPLORE_MAP_Y_MARGIN > area.scrollTop + metrics.height);
     if (moveX || moveY) scrollTo(moveX ? x - metrics.width / 2 : area.scrollLeft,
       moveY ? y - metrics.height / 2 : area.scrollTop);
   }
@@ -150,9 +150,10 @@ function ExploreNavigation({ graph, activeId, onNavigate, returnLabel }) {
     if (!area || !surface) { layout.current = null; return; }
     const previous = layout.current;
     const fitsX = area.clientWidth >= fitWidth;
-    const metrics = { width: area.clientWidth, height: area.clientHeight, fitsX,
+    const fitsY = area.clientHeight >= height + 2 * (EXPLORE_MAP_Y_MARGIN - EXPLORE_MAP_PADDING);
+    const metrics = { width: area.clientWidth, height: area.clientHeight, fitsX, fitsY,
       padX: fitsX ? (area.clientWidth - width) / 2 : Math.max(0, area.clientWidth / 2 - EXPLORE_MAP_PADDING),
-      padY: Math.max(0, area.clientHeight / 2 - EXPLORE_MAP_PADDING),
+      padY: fitsY ? (area.clientHeight - height) / 2 : Math.max(0, area.clientHeight / 2 - EXPLORE_MAP_PADDING),
       left: area.scrollLeft, top: area.scrollTop };
     surface.style.paddingLeft = surface.style.paddingRight = `${metrics.padX}px`;
     surface.style.paddingTop = surface.style.paddingBottom = `${metrics.padY}px`;
@@ -197,6 +198,7 @@ function ExploreNavigation({ graph, activeId, onNavigate, returnLabel }) {
       }
     }
     if (fitsX && area.scrollLeft !== 0) area.scrollLeft = 0;
+    if (fitsY && area.scrollTop !== 0) area.scrollTop = 0;
     readScroll();
     if (focused && !nodes.some((node) => keyFor(node) === focused) && document.activeElement === document.body) {
       let target = previous?.nodes.find((node) => keyFor(node) === focused)?.parent;
@@ -250,14 +252,14 @@ function ExploreNavigation({ graph, activeId, onNavigate, returnLabel }) {
       const row = nodes.filter((item) => item.depth === node.depth).sort((a, b) => a.x - b.x);
       target = row[row.indexOf(node) + (event.key === 'ArrowLeft' ? -1 : 1)] ?? node;
     } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-      if (event.key === 'ArrowDown') {
+      if (event.key === 'ArrowUp') {
         for (let parent = node.parent; parent; parent = parent.parent) {
           if (parent.depth < node.depth) { target = parent; break; }
         }
       }
-      const candidates = event.key === 'ArrowUp'
+      const candidates = event.key === 'ArrowDown'
         ? nodes.filter((item) => item.parent === node && item.depth > node.depth) : [];
-      const nearby = candidates.length ? candidates : nodes.filter((item) => event.key === 'ArrowUp' ? item.depth > node.depth : item.depth < node.depth);
+      const nearby = candidates.length ? candidates : nodes.filter((item) => event.key === 'ArrowDown' ? item.depth > node.depth : item.depth < node.depth);
       target ??= nearby.sort((a, b) => Math.abs(a.depth - node.depth) - Math.abs(b.depth - node.depth)
         || Math.abs(a.x - node.x) - Math.abs(b.x - node.x) || a.x - b.x)[0] ?? node;
     } else return;
@@ -338,9 +340,7 @@ function ExploreNavigation({ graph, activeId, onNavigate, returnLabel }) {
         ),
       ),
     ),
-    hintVisible && h('div', { id: hintId, role: 'tooltip', className: 'dsh-btw-map-hint', style: { top: hintY } },
-      h('span', { className: 'dsh-btw-map-hint-kind' }, hintNode.card
-        ? `${EXPLORE_RELATIONS[hintNode.card.relation] ?? '卡片'}${!hintNode.card.nativeSessionId && Number.isInteger(hintNode.card.turnCount) && hintNode.card.turnCount >= 0 ? ` · ${hintNode.card.turnCount} 轮问答` : ''}` : '返回'),
+    hintVisible && h('div', { id: hintId, role: 'tooltip', className: 'dsh-btw-map-hint', style: { '--btw-map-hint-y': `${hintY}px` } },
       h('span', { className: 'dsh-btw-map-hint-title' }, hintNode.card ? exploreTitle(hintNode.card) : returnLabel),
     ),
   );

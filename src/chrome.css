@@ -7,6 +7,31 @@
   margin-bottom: 10px;
 }
 
+.dsh-btw-head-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 2px;
+}
+
+.dsh-btw-grip {
+  display: grid;
+  place-items: center;
+  flex: 0 0 28px;
+  height: 32px;
+  margin-inline-start: -6px;
+  border-radius: 6px;
+  color: var(--btw-muted);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.dsh-btw-grip:hover {
+  color: var(--btw-ink);
+  background: var(--btw-hover);
+}
+
 .dsh-btw-crumbs {
   gap: 8px;
   line-height: 1.4;
@@ -67,9 +92,66 @@
   font-weight: 600;
 }
 
-.dsh-btw-card-meta {
-  margin-top: 4px;
-  line-height: 1.5;
+.dsh-btw-quote-title {
+  margin: 0;
+  min-width: 0;
+  color: var(--btw-ink);
+  font-size: 23px;
+  font-weight: 600;
+  line-height: 1.32;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.dsh-btw-quote-details {
+  width: 100%;
+  min-width: 0;
+}
+
+.dsh-btw-quote-details summary {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.dsh-btw-quote-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.dsh-btw-quote-details summary::after {
+  content: '';
+  flex: 0 0 6px;
+  height: 6px;
+  margin: 9px 6px 0 1px;
+  border: solid var(--btw-muted);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+
+.dsh-btw-quote-details[open] summary::after {
+  transform: translateY(3px) rotate(225deg);
+}
+
+.dsh-btw-quote-details .dsh-btw-quote-title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.dsh-btw-quote-details .dsh-btw-quoted-full {
+  max-height: min(116px, 18dvh);
+  margin: 6px 0 0;
+  padding: 0;
+  overflow: auto;
+  color: var(--btw-muted);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .dsh-btw-explore .dsh-btw-chrome-action {
@@ -107,6 +189,15 @@
 
 .dsh-btw-head-title > .dsh-btw-remove {
   margin-inline-end: -8px;
+}
+
+.dsh-btw-explore .dsh-btw-head-actions .dsh-btw-remove {
+  width: 32px;
+  padding: 0;
+}
+
+.dsh-btw-head-actions .dsh-btw-remove .dsh-btw-control-label {
+  display: none;
 }
 
 .dsh-btw-explore .dsh-btw-remove:hover:not(:disabled),
@@ -177,22 +268,31 @@
   padding-top: 10px;
 }
 
-.dsh-btw-native-source {
-  padding: 10px 24px 0;
+.dsh-btw-head > .dsh-btw-source {
+  margin: 5px 0 0;
 }
 
-.dsh-btw-native-source .dsh-btw-source {
-  max-height: min(160px, 24dvh);
-  margin-bottom: 4px;
-  padding-bottom: 4px;
+.dsh-btw-head .dsh-btw-source-head {
+  min-height: 24px;
 }
 
-.dsh-btw-native-source .dsh-btw-source-return {
-  margin-inline-end: 0;
+.dsh-btw-head .dsh-btw-source-return {
+  min-height: 28px;
 }
 
-.dsh-btw-native-source .dsh-btw-source-return:focus-visible {
-  outline-offset: -2px;
+/* Resize only the native composer inside a card. Its controls and editor stay native. */
+.dsh-btw-native [data-composer-card] {
+  max-inline-size: min(100%, 700px);
+  row-gap: 5px;
+  padding-block-start: 5px;
+}
+
+.dsh-btw-native [data-composer-input] {
+  min-block-size: calc(29px + var(--dsh-content-font-delta, 0px));
+}
+
+.dsh-btw-native [data-input-scroll] {
+  max-block-size: min(var(--dsh-composer-text-max-height, 336px), max(96px, 26dvh));
 }
 
 @container btw-explore (max-width: 700px) {
@@ -209,8 +309,8 @@
     font-size: 17px;
   }
 
-  .dsh-btw-native-source {
-    padding: 8px 16px 0;
+  .dsh-btw-quote-title {
+    font-size: 21px;
   }
 }
 
@@ -233,16 +333,7 @@
     font-size: 16px;
   }
 
-  .dsh-btw-source-head {
-    flex-wrap: wrap;
-    gap: 0 8px;
-  }
-
-  .dsh-btw-source-origin {
-    flex-basis: 150px;
-  }
-
-  .dsh-btw-source-return {
-    margin-inline-start: auto;
+  .dsh-btw-quote-title {
+    font-size: 19px;
   }
 }

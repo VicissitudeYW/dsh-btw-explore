@@ -3,7 +3,7 @@
   display: block;
   position: absolute;
   z-index: 2;
-  inset-inline-end: var(--btw-page-edge);
+  inset-inline-start: var(--btw-page-edge);
   inset-block-start: 50%;
   transform: translateY(-50%);
   box-sizing: border-box;
@@ -29,6 +29,11 @@
   mask-composite: intersect;
 }
 .dsh-btw-map-viewport::-webkit-scrollbar { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  .dsh-btw-map-viewport { opacity: .48; transition: opacity 180ms ease-out; }
+  .dsh-btw-map:is(:hover, :has(.dsh-btw-map-node:focus-visible)) .dsh-btw-map-viewport { opacity: 1; }
+}
+.dsh-btw-map:not(:hover, :has(.dsh-btw-map-node:focus-visible)) .dsh-btw-map-hint { visibility: hidden; }
 .dsh-btw-map-viewport[data-btw-dragging] { cursor: grabbing; }
 .dsh-btw-map-stage { box-sizing: content-box; width: max-content; }
 .dsh-btw-map-graph { position: relative; flex: none; }
@@ -112,15 +117,13 @@
 .dsh-btw-map-viewport[data-btw-dragging] .dsh-btw-map-node .dsh-btw-map-dot { transform: none; }
 .dsh-btw-map-hint {
   position: absolute;
-  inset-inline-end: calc(100% + 10px);
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+  inset-inline-start: calc(100% + 8px);
+  top: clamp(16px, var(--btw-map-hint-y), calc(100% - 16px));
   width: max-content;
   max-width: min(250px, calc(100dvw - var(--btw-map-width) - 32px));
-  padding: 10px 13px;
+  padding: 7px 10px;
   border: 1px solid var(--btw-line);
-  border-radius: 12px;
+  border-radius: 7px;
   color: var(--btw-ink);
   background: var(--btw-raised);
   box-shadow: 0 4px 18px rgb(14 15 21 / 16%);
@@ -128,12 +131,11 @@
   transform: translateY(-50%);
   animation: dsh-btw-map-hint-in 160ms var(--btw-map-ease);
 }
-.dsh-btw-map-hint-kind, .dsh-btw-map-hint-meta { order: 1; font-size: 11px; color: var(--btw-muted); }
-.dsh-btw-map-hint-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 500; font-size: 12px; }
-@keyframes dsh-btw-map-appear { from { opacity: .35; translate: 8px 0; } }
-@keyframes dsh-btw-map-hint-in { from { opacity: 0; translate: 5px 0; } }
+.dsh-btw-map-hint-title { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 500; font-size: 12px; }
+@keyframes dsh-btw-map-appear { from { opacity: .35; translate: -6px 0; } }
+@keyframes dsh-btw-map-hint-in { from { opacity: 0; translate: -4px 0; } }
 @media (prefers-reduced-motion: reduce) {
   .dsh-btw-map, .dsh-btw-map-hint { animation: none; }
-  .dsh-btw-map-current, .dsh-btw-map-node, .dsh-btw-map-lines path,
+  .dsh-btw-map-viewport, .dsh-btw-map-current, .dsh-btw-map-node, .dsh-btw-map-lines path,
   .dsh-btw-map-node .dsh-btw-map-dot, .dsh-btw-map-node .dsh-btw-map-halo { transition: none; }
 }

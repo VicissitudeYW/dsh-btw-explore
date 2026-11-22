@@ -1,5 +1,6 @@
 const EXPLORE_PATH = '/api/dsh-btw-explore';
 const EXPLORE_VIEW = 'dsh-btw-explore';
+const explorerViewOpeners = new Map();
 let sessionsService;
 let conversationService;
 
@@ -79,6 +80,13 @@ function ExplorerMarkdown(props) {
 
 function NativeExplorer({ sessionId, openView, renderFactorySlot }) {
   const [notice, setNotice] = React.useState('');
+  React.useLayoutEffect(() => {
+    if (typeof openView !== 'function') return;
+    explorerViewOpeners.set(sessionId, openView);
+    return () => {
+      if (explorerViewOpeners.get(sessionId) === openView) explorerViewOpeners.delete(sessionId);
+    };
+  }, [sessionId, openView]);
   const onChat = (source) => {
     if (typeof openView !== 'function') { setNotice('请从会话上方切换到聊天。'); return; }
     const turn = source?.turn;
@@ -97,40 +105,6 @@ function NativeExplorer({ sessionId, openView, renderFactorySlot }) {
     notice ? h('div', { role: 'status', className: 'dsh-btw-error' }, notice) : null,
     h(ExploreView, { key: sessionId, sessionId, onChat, request: explorerRequest, Markdown: ExplorerMarkdown,
       nativeCards: typeof renderFactorySlot === 'function' }));
-}
-
-// rc.5's utility slot has no shell store actions. Select its resident tab,
-// letting the shell perform its own view activation and persistence.
-function activateExplorerTab(button) {
-  const tabs = button?.closest('header')?.querySelector('[data-conversation-tabs]');
-  if (!tabs) return;
-  const isExplore = (element) => element.textContent.trim() === '探索';
-  const tab = [...tabs.querySelectorAll('[role="tab"]')].find(isExplore);
-  if (tab) { tab.click(); return; }
-
-  // When space is limited, the same view is offered by the header's portal menu.
-  const more = tabs.parentElement.querySelector('button[aria-haspopup="menu"]');
-  const anchor = more?.parentElement.style.getPropertyValue('anchor-name');
-  if (!anchor) return;
-  const findItem = () => {
-    const menu = [...document.querySelectorAll('[role="menu"]')]
-      .find((element) => element.style.getPropertyValue('position-anchor') === anchor);
-    return [...menu?.querySelectorAll('[role="menuitem"]') ?? []].find(isExplore);
-  };
-  const existing = findItem();
-  if (existing) { existing.click(); return; }
-  const cleanup = () => {
-    observer.disconnect();
-    clearTimeout(timeout);
-  };
-  const observer = new MutationObserver(() => {
-    if (!more.isConnected) { cleanup(); return; }
-    const item = findItem();
-    if (item) { cleanup(); item.click(); }
-  });
-  const timeout = setTimeout(cleanup, 750);
-  observer.observe(document.body, { childList: true, subtree: true });
-  if (more.getAttribute('aria-expanded') !== 'true') more.click();
 }
 
 // Text interactions are first-claim keyed surfaces in rc.5. If native quotes
@@ -192,13 +166,14 @@ function supplementSelection(sessionId) {
   };
 }
 
-function ExplorerEntry({ sessionId, renderFactorySlot }) {
-  const button = React.useRef(null);
+function ExplorerHost({ sessionId, renderFactorySlot }) {
+  const owner = React.useRef(null);
+  const returnToChat = React.useCallback(() => explorerViewOpeners.get(sessionId)?.('chat'), [sessionId]);
   React.useEffect(() => supplementSelection(sessionId), [sessionId]);
   return h(React.Fragment, null,
-    h('button', { ref: button, type: 'button', className: 'dsh-btw-entry', title: '打开旁路卡片树', onClick: () => activateExplorerTab(button.current) }, '探索'),
+    h('span', { ref: owner, hidden: true, style: { display: 'none' } }),
     h(ExplorePages, { key: sessionId, sessionId, request: explorerRequest, Markdown: ExplorerMarkdown,
-      portal: explorerPortal, ownerRef: button,
+      portal: explorerPortal, ownerRef: owner, onReturnChat: returnToChat,
       renderNative: typeof renderFactorySlot !== 'function' ? undefined : (card, ownerSessionId) =>
         renderFactorySlot(EXPLORE_NATIVE_FACTORY, { ownerSessionId, cardId: card.id, nativeSessionId: card.nativeSessionId }),
     }),
@@ -244,7 +219,7 @@ return {
     slots.inject('conversation.session.header.utilities', () => slots.register({
       name: 'conversation.session.header.utilities', id: EXPLORE_VIEW, order: 20,
       inject: (sessionId) => ({ sessionId }),
-    }, ExplorerEntry));
+    }, ExplorerHost));
     ctx.effect(() => conversationService.interactions.register({
       id: EXPLORE_VIEW,
       onInteraction(request) {

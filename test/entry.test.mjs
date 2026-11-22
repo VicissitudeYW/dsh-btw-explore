@@ -11,7 +11,7 @@ globalThis.MutationObserver = dom.window.MutationObserver;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const { createRoot } = await import('react-dom/client');
 const read = (file) => fs.readFileSync(new URL(`../src/${file}.js`, import.meta.url), 'utf8');
-const source = [read('view'), 'ExploreView = mockExploreView;', read('pages'), read('navigation'), read('native'), read('entry')].join('\n');
+const source = [read('view'), 'ExploreView = mockExploreView;', read('drag'), read('pages'), read('navigation'), read('native'), read('entry')].join('\n');
 const overlay = () => document.querySelector('[role="dialog"][aria-modal="true"]');
 
 async function setup(t) {
@@ -54,39 +54,14 @@ async function setup(t) {
   return { slots, draft: () => lastDraft, navigations: () => navigations };
 }
 
-test('header selects the tree without registering any permanent assistant actions', async (t) => {
+test('the tree is a conversation tab with no duplicate header or assistant action', async (t) => {
   const app = await setup(t);
-  await act(async () => document.querySelector('#entry button').click());
+  assert.equal(document.querySelector('#entry button'), null);
+  assert.equal(app.slots.get('conversation.view').options.label, '探索');
+  await act(async () => document.querySelector('[role="tab"] + [role="tab"]').click());
   assert.equal(app.navigations(), 1);
   assert.equal(overlay(), null);
   assert.equal(app.slots.has('conversation.chat.assistant-actions'), false);
-});
-
-test('opening the tree selects the exploration item in the same header overflow menu', async (t) => {
-  await setup(t);
-  const tabs = document.querySelector('[data-conversation-tabs]');
-  tabs.querySelector('[role="tab"] + [role="tab"]').remove();
-  const anchor = document.createElement('span');
-  anchor.style.setProperty('anchor-name', '--fixture-header');
-  anchor.innerHTML = '<button aria-haspopup="menu" aria-expanded="false">更多会话视图</button>';
-  tabs.after(anchor);
-  const other = document.createElement('div');
-  other.innerHTML = '<div role="menu" style="position-anchor: --other-header"><button role="menuitem">探索</button></div>';
-  document.body.append(other);
-  other.querySelector('button').addEventListener('click', () => assert.fail('another menu was selected'));
-  let navigated = false;
-  anchor.querySelector('button').addEventListener('click', () => {
-    queueMicrotask(() => {
-      const menu = document.createElement('div');
-      menu.setAttribute('role', 'menu');
-      menu.style.setProperty('position-anchor', '--fixture-header');
-      menu.innerHTML = '<button role="menuitem">探索</button>';
-      menu.querySelector('button').addEventListener('click', () => { navigated = true; });
-      document.body.append(menu);
-    });
-  });
-  await act(async () => document.querySelector('#entry button').click());
-  assert.equal(navigated, true);
 });
 
 test('selection action coexists with an earlier native quote handler and preserves the source', async (t) => {
@@ -116,7 +91,7 @@ test('selection action coexists with an earlier native quote handler and preserv
   const message = region.querySelector('[data-chat-turn]');
   assert.ok(document.activeElement === message);
   assert.equal(message.getAttribute('tabindex'), '-1', 'the message stays focusable until focus leaves');
-  document.querySelector('#entry button').focus();
+  document.querySelector('[role="tab"]').focus();
   assert.equal(message.hasAttribute('tabindex'), false);
 });
 

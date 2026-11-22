@@ -12,6 +12,7 @@ const output = `window.__ModuleLoader__.load({
     const EXPLORE_CSS = ${JSON.stringify(['src/explore.css', 'src/chrome.css', 'src/navigation.css', 'src/motion.css'].map(read).join('\n'))};
     ${read('src/view.js')}
     ${read('src/navigation.js')}
+    ${read('src/drag.js')}
     ${read('src/pages.js')}
     ${read('src/native.js')}
     ${read('src/entry.js')}

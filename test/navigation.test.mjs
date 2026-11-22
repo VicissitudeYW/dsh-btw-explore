@@ -102,10 +102,10 @@ test('悬停和空间方向键显示标题，只保留一个 Tab 入口且浏览
   await act(async () => view.node('child').dispatchEvent(new window.MouseEvent('pointerout', { bubbles: true })));
   assert.equal(document.querySelector('[role="tooltip"]'), null);
   await act(async () => view.node('parent').focus());
-  assert.match(document.querySelector('[role="tooltip"]').textContent, /3 轮问答/);
+  assert.equal(document.querySelector('[role="tooltip"]').textContent, 'parent');
   await act(async () => view.node('parent').dispatchEvent(new window.MouseEvent('pointerover', { bubbles: true })));
-  await key(view.node('parent'), 'ArrowUp');
-  assert.ok(document.activeElement === view.node('child'), '子卡在上方，向上浏览应进入子卡');
+  await key(view.node('parent'), 'ArrowDown');
+  assert.ok(document.activeElement === view.node('child'), '子卡在下方，向下浏览应进入子卡');
   assert.match(document.querySelector('[role="tooltip"]').textContent, /child/, '键盘提示优先于旧的悬停节点');
   assert.equal(document.querySelectorAll('.dsh-btw-map-node[tabindex="0"]').length, 1);
   assert.equal(view.node('child').tabIndex, 0);
@@ -118,7 +118,7 @@ test('悬停和空间方向键显示标题，只保留一个 Tab 入口且浏览
   assert.equal(document.querySelectorAll('.dsh-btw-map-current').length, 1);
 });
 
-test('左右浏览同层，向下返回空间来源，Home 和 End 可抵达图的两端', async (t) => {
+test('左右浏览同层，向上返回空间来源，Home 和 End 可抵达图的两端', async (t) => {
   const view = await mount(t, [card('parent'), card('branch', { parentId: 'parent', relation: 'branch' }),
     card('child', { parentId: 'parent', relation: 'child' }), card('other')], 'parent');
   await act(async () => view.node('parent').focus());
@@ -126,15 +126,31 @@ test('左右浏览同层，向下返回空间来源，Home 和 End 可抵达图�
   assert.ok(document.activeElement === view.node('branch'));
   await key(view.node('branch'), 'ArrowRight');
   assert.ok(document.activeElement === view.node('parent'));
-  await key(view.node('parent'), 'ArrowUp');
+  await key(view.node('parent'), 'ArrowDown');
   assert.ok(document.activeElement === view.node('child'));
-  await key(view.node('child'), 'ArrowDown');
+  await key(view.node('child'), 'ArrowUp');
   assert.ok(document.activeElement === view.node('parent'));
   await key(view.node('parent'), 'Home');
   assert.ok(document.activeElement === view.node('home'));
   await key(view.node('home'), 'End');
   assert.ok(document.activeElement === view.node('child'));
   assert.deepEqual(view.moves, []);
+});
+
+test('整棵树可以放下时，切卡后仍然看得到位于顶部的主聊天', async (t) => {
+  const cards = [card('parent'), card('child', { parentId: 'parent', relation: 'child' })];
+  const view = await mount(t, cards, 'child', { width: 144, height: 240 });
+  const assertVisible = () => {
+    const [home, parent, child] = ['home', 'parent', 'child'].map((id) => position(view, id).y);
+    assert.ok(home < parent && parent < child, '聊天在最上，下级沿同方向展开');
+    assert.ok(home >= 38 && child <= viewportSize.height - 38, '首尾节点都位于淡出区域内部');
+  };
+  assertVisible();
+  await view.render(cards, 'parent');
+  assertVisible();
+  await act(async () => view.area.dispatchEvent(new window.WheelEvent('wheel', { deltaY: 500, bubbles: true, cancelable: true })));
+  assert.equal(view.area.scrollTop, 0, '没有溢出时滚轮不能藏起主聊天');
+  assertVisible();
 });
 
 test('键盘重新进入导航时，焦点提示覆盖鼠标遗留的悬停节点', async (t) => {
@@ -172,16 +188,16 @@ test('后台移除正在浏览的节点时焦点回到存活来源，已移到�
 test('手动平移到非当前层后，后台扩宽该层保持可见节点的位置', async (t) => {
   const cards = [card('parent'), ...Array.from({ length: 30 }, (_, index) =>
     card(`child-${index}`, { parentId: 'parent', relation: 'child' }))];
-  const view = await mount(t, cards, 'parent');
+  const view = await mount(t, cards, 'parent', { width: 144, height: 160 });
   viewportSize.width = 72;
   await act(async () => window.dispatchEvent(new window.Event('resize')));
   await act(async () => {
     view.area.scrollLeft = 0;
-    view.area.scrollTop = 0;
+    view.area.scrollTop = 144;
     view.area.dispatchEvent(new window.Event('scroll'));
   });
   const before = position(view, 'child-0');
-  assert.deepEqual(before, { x: 36, y: 100 });
+  assert.deepEqual(before, { x: 36, y: 80 });
   assert.ok(position(view, 'parent').x > viewportSize.width, '当前卡已经不在用户浏览区域');
   await view.render([...cards, card('child-30', { parentId: 'parent', relation: 'child' })], 'parent');
   assert.deepEqual(position(view, 'child-0'), before, '视野外的当前卡不应成为平移补偿的锚点');
@@ -206,6 +222,10 @@ test('连线从圆周边缘接入，分支用同层曲线且路径保持来源�
     assert.match(path.getAttribute('d'), /^M [-\d.]+ [-\d.]+ C /, '正式导航使用 cubic Bezier 连线');
   }
   const branchLine = paths.find((path) => path.getAttribute('data-btw-node-key') === 'branch');
+  const childLine = paths.find((path) => path.getAttribute('data-btw-node-key') === 'child');
+  const childCoordinates = childLine.getAttribute('d').match(/-?\d+(?:\.\d+)?/g).map(Number);
+  assert.equal(childCoordinates[1], parseFloat(view.node('parent').style.top) + 12);
+  assert.equal(childCoordinates.at(-1), parseFloat(view.node('child').style.top) - 12);
   assert.ok(branchLine);
   const coordinates = branchLine.getAttribute('d').match(/-?\d+(?:\.\d+)?/g).map(Number);
   assert.equal(coordinates[1], parseFloat(view.node('branch').style.top));
@@ -215,7 +235,7 @@ test('连线从圆周边缘接入，分支用同层曲线且路径保持来源�
   assert.deepEqual(view.moves, [['parent', 'branch']], '同层布局不能丢失来源卡片');
 });
 
-test('跨过同层节点的分支连线从下方绕行，保留中间36px点击区的可辨边界', async (t) => {
+test('跨过同层节点的分支连线从上方绕行，保留中间36px点击区的可辨边界', async (t) => {
   const view = await mount(t, [card('parent'), ...Array.from({ length: 8 }, (_, index) =>
     card(`branch-${index}`, { parentId: 'parent', relation: 'branch' }))], 'parent');
   const path = document.querySelector('path[data-btw-node-key="branch-0"]');
@@ -225,14 +245,14 @@ test('跨过同层节点的分支连线从下方绕行，保留中间36px点击�
   const obstacles = Array.from({ length: 7 }, (_, index) => ({
     x: parseFloat(view.node(`branch-${index + 1}`).style.left), y: baseline,
   }));
-  assert.ok(y >= baseline, '绕行应在本层下方，避免进入上方子卡连线');
+  assert.ok(y <= baseline, '绕行应在本层上方，避免进入下方子卡连线');
   for (const command of commands.slice(1)) {
     const [cx1, cy1, cx2, cy2, endX, endY] = command[2].trim().split(/\s+/).map(Number);
     for (let step = 0; step <= 100; step += 1) {
       const t = step / 100;
       const pointX = (1 - t) ** 3 * x + 3 * (1 - t) ** 2 * t * cx1 + 3 * (1 - t) * t ** 2 * cx2 + t ** 3 * endX;
       const pointY = (1 - t) ** 3 * y + 3 * (1 - t) ** 2 * t * cy1 + 3 * (1 - t) * t ** 2 * cy2 + t ** 3 * endY;
-      assert.ok(pointY >= baseline, '跨项连线保持在本层下方');
+      assert.ok(pointY <= baseline, '跨项连线保持在本层上方');
       for (const obstacle of obstacles) assert.ok(Math.hypot(pointX - obstacle.x, pointY - obstacle.y) >= 18,
         '曲线不能穿过中间节点的36px点击区');
     }
@@ -261,7 +281,7 @@ test('切卡与 resize 居中，普通刷新和无关增删保留当前浏览锚
   assert.deepEqual(position(view, 'child-7'), { x: 72, y: 100 });
   viewportSize = { width: 72, height: 260 };
   await act(async () => window.dispatchEvent(new window.Event('resize')));
-  assert.deepEqual(position(view, 'child-7'), { x: 36, y: 130 });
+  assert.deepEqual(position(view, 'child-7'), { x: 36, y: 202 });
 });
 
 test('刷新优先保留键盘正在浏览的节点位置，宽树全部节点都能进入可视区', async (t) => {
@@ -285,15 +305,15 @@ test('刷新优先保留键盘正在浏览的节点位置，宽树全部节点�
 test('后台增加深层卡改变视口高度时保留锚点，并补偿实际 padding 的变化', async (t) => {
   const cards = [card('parent'), card('child', { parentId: 'parent', relation: 'child' })];
   const view = await mount(t, cards, 'parent');
-  viewportSize = { width: 144, height: 240 };
+  viewportSize = { width: 144, height: 190 };
   await act(async () => window.dispatchEvent(new window.Event('resize')));
   view.area.scrollTop = 45;
   await act(async () => view.area.dispatchEvent(new window.Event('scroll')));
   const anchor = position(view, 'parent');
-  viewportSize = { width: 144, height: 312 };
+  viewportSize = { width: 144, height: 210 };
   await view.render([...cards, card('deep', { parentId: 'child', relation: 'child' })], 'parent');
   assert.deepEqual(position(view, 'parent'), anchor, '数据使容器变高时不能强制把当前点抢回中间');
-  viewportSize = { width: 144, height: 240 };
+  viewportSize = { width: 144, height: 190 };
   await view.render(cards, 'parent');
   assert.deepEqual(position(view, 'parent'), anchor, '缩回原高度同样补偿 padding 差值');
 });
@@ -363,7 +383,7 @@ test('从裁切的节点起拖时默认鼠标聚焦不会先移动视野', async
   const view = await mount(t, [card('parent'), ...Array.from({ length: 30 }, (_, index) =>
     card(`child-${index}`, { parentId: 'parent', relation: 'child' }))], 'parent');
   view.area.scrollLeft = 550;
-  view.area.scrollTop = 0;
+  view.area.scrollTop = 144;
   await act(async () => view.area.dispatchEvent(new window.Event('scroll')));
   assert.equal(position(view, 'child-13').x, 16, '节点只露出部分点击区');
   await pointer(view.node('child-13'), 'pointerdown');
