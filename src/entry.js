@@ -33,6 +33,9 @@ async function explorerRequest(sessionId, options = {}) {
     return card;
   }
   if (!response.ok) throw new Error(result?.error || '探索请求失败，请稍后重试。');
+  if (['open-native', 'explain-native', 'select-native-version', 'remove'].includes(action)) {
+    window.dispatchEvent(new window.Event('dsh-btw-explore:sidebar-refresh'));
+  }
   return result;
 }
 
@@ -242,6 +245,7 @@ return {
     conversationService = ctx.get('uiConversation');
     if (!slots || !sessionsService || !conversationService) throw new Error('[dsh-btw-explore] 缺少 DSH 会话 UI，请检查插件依赖。');
     if (typeof slots.registerFactory === 'function') registerExploreNative(slots);
+    if (typeof registerExploreSidebar === 'function') registerExploreSidebar(slots, ctx);
     ctx.effect(() => {
       const style = document.createElement('style');
       style.dataset.plugin = EXPLORE_VIEW;

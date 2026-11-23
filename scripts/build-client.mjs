@@ -9,13 +9,14 @@ const output = `window.__ModuleLoader__.load({
   factory: (require) => {
     const React = require('react');
     const h = React.createElement;
-    const EXPLORE_CSS = ${JSON.stringify(['src/explore.css', 'src/chrome.css', 'src/navigation.css', 'src/motion.css', 'src/whiteboard.css'].map(read).join('\n'))};
+    const EXPLORE_CSS = ${JSON.stringify(['src/explore.css', 'src/chrome.css', 'src/navigation.css', 'src/motion.css', 'src/whiteboard.css', 'src/sidebar.css'].map(read).join('\n'))};
     ${read('src/view.js')}
     ${read('src/navigation.js')}
     ${read('src/drag.js')}
     ${read('src/pages.js')}
     ${read('src/native.js')}
     ${read('src/whiteboard.js')}
+    ${read('src/sidebar.js')}
     ${read('src/entry.js')}
   }
 });\n`;
