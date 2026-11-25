@@ -174,7 +174,7 @@ function ExploreNavigation({ graph, activeId, onNavigate, returnLabel, chatRegio
       if (chatRegion) {
         const bounds = chatRegion.getBoundingClientRect();
         const inChat = x >= bounds.left && x < bounds.right && y >= bounds.top && y < bounds.bottom;
-        const nearEdge = inChat && x <= bounds.left + 48;
+        const nearEdge = inChat && x >= bounds.right - 48;
         const overMap = element.contains(event.target instanceof window.Node ? event.target : null);
         const rect = element.hasAttribute('data-btw-near') && element.getBoundingClientRect();
         const nearMap = rect && x >= rect.left - 12 && x <= rect.right + 12 && y >= rect.top - 12 && y <= rect.bottom + 12;

@@ -13,9 +13,9 @@ function installExplorerDeckDrag(overlay) {
     const viewport = overlay.getBoundingClientRect();
     if (!box.width || !box.height || !viewport.width || !viewport.height) return;
     const rail = overlay.querySelector('.dsh-btw-map')?.getBoundingClientRect();
-    const left = Math.max(viewport.left, rail?.right ?? viewport.left) + padding;
-    const dxMin = left - (box.left - x);
-    const dxMax = viewport.right - padding - (box.right - x);
+    const right = Math.min(viewport.right, rail?.left ?? viewport.right) - padding;
+    const dxMin = viewport.left + padding - (box.left - x);
+    const dxMax = right - (box.right - x);
     const dyMin = viewport.top + padding - (box.top - y);
     const dyMax = viewport.bottom - padding - (box.bottom - y);
     // At very small sizes the layout itself fits more tightly than this margin.

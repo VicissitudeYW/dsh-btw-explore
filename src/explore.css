@@ -190,8 +190,8 @@ button.dsh-btw-selection-button:focus-visible {
   position: absolute;
   top: var(--btw-drag-y, 0px);
   bottom: calc(-1 * var(--btw-drag-y, 0px));
-  left: calc(var(--btw-chat-left) + var(--btw-page-edge) + var(--btw-map-reserve) + var(--btw-drag-x, 0px));
-  right: calc(var(--btw-chat-right) + var(--btw-page-edge) - var(--btw-drag-x, 0px));
+  left: calc(var(--btw-chat-left) + var(--btw-page-edge) + var(--btw-drag-x, 0px));
+  right: calc(var(--btw-chat-right) + var(--btw-page-edge) + var(--btw-map-reserve) - var(--btw-drag-x, 0px));
   margin: auto;
   box-sizing: border-box;
   width: min(1240px, calc(var(--btw-chat-width) - 2 * var(--btw-page-edge) - var(--btw-map-reserve)));
